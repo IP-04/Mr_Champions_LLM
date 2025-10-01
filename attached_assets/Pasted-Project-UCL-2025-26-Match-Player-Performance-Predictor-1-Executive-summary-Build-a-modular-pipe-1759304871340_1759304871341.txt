@@ -1,0 +1,318 @@
+Project: UCL 2025–26 Match + Player Performance Predictor
+1) Executive summary
+
+Build a modular pipeline that ingests Champions League fixtures and stats, engineers multi-horizon features, trains two model families—(A) team-level match/outcome models and (B) player-level performance models—and serves real-time inferences with low latency. The design borrows from OpenFPL’s position-specific ensemble regressors over public data (Understat/FPL in their case) and extends with an action-value model on event streams (possession-chain deltas + CatBoost) from the transfer-fee paper to score player contributions beyond simple box scores. OpenFPL’s paper details the ensemble idea, multi-horizon features, and prospective evaluation against a commercial benchmark; its repo is MIT-licensed and provides a skeleton (samples + notebook) you can adapt to a new competition. 
+arXiv
++1
+
+2) Scope & goals
+
+Competition: UEFA Champions League 2025–26 (group + knockout).
+
+Outputs:
+
+Match Predictor: win/draw/loss (and scoreline/xG) per fixture; calibrated probs.
+
+Player Predictor: per-match expected contribution (VAEP-like “value” or OpenFPL-style “expected points”), minutes likelihood, and uncertainty.
+
+Latency targets:
+
+Batch pre-match updates daily and T-1h before kickoff.
+
+Live in-match refresh (optional stretch): ≤2–5s from event to updated probs.
+
+3) Data sources (free + upgrade paths)
+
+Free / public
+
+football-data.org: fixtures, standings, squads, lineups for UCL with REST v4; free tier includes Champions League. 
+Football Data
++1
+
+UEFA.com stats (view): official competition stats for 2025/26 (not an API; use for manual QA / ground truth). 
+UEFA.com
+
+FBref: seasonal UCL stats pages (view; xG derived from StatsBomb for some comps—use for QA, not scraping). 
+FBref
+
+StatsBomb Open Data: free event data for select comps (e.g., Euro 2025) to pretrain xG/action models and transfer-learn to UCL. 
+GitHub
++1
+
+If you need richer programmatic data
+
+API-Football (paid tiers): fixtures, live events, lineups, player stats; straightforward REST. 
+api-football
+
+Note on Understat
+Understat is great for top domestic leagues but does not expose UCL as a “league” endpoint; their site lists EPL/LaLiga/Bundesliga/Serie A/Ligue 1/RFPL. Plan to rely on football-data.org + (paid) API-Football or your own xG model for UCL. 
+Understat
+
+4) Modeling approach (what you’ll say in the interview)
+4.1 Player model (primary differentiator)
+
+Two layers:
+
+(L1) Action-value model (possession-chain)
+
+Follow the paper’s core idea: for each action in a possession chain, estimate Δ goal probability
+
+𝑐
+𝑖
+(
+𝑘
+)
+(
+𝑗
+)
+=
+𝑃
+(
+score
+∣
+𝑠
+𝑘
++
+1
+)
+−
+𝑃
+(
+score
+∣
+𝑠
+𝑘
+)
+c
+i
+(k)
+	​
+
+(j)=P(score∣s
+k+1
+	​
+
+)−P(score∣s
+k
+	​
+
+)
+and sum per player per match; normalize by appearances to compare players fairly. Use CatBoost for the goal-scoring predicate and an xG model for shot terminal states (CatBoost baseline outperformed LR/RF in their experiments). 
+arXiv
++1
+
+Event features: action type, coordinates, pressure flag, previous action, play pattern, chain time/length (as in the paper’s feature schema). 
+arXiv
+
+Pretrain on StatsBomb Open Data (Euro 2025, etc.), then adapt to UCL via calibration/domain shift handling. 
+GitHub
++1
+
+(L2) Match-level player forecast
+
+Convert L1 contributions + context into expected per-match contribution:
+features = rolling means over recent 1/3/5/10 matches, opponent defensive intensity, travel/rest days, role, likely minutes; predict “expected contribution” (or fantasy-style points) per player with position-specific ensembles (XGBoost + Random Forest) and multi-horizon features—the OpenFPL recipe. 
+arXiv
+
+Why this is strong: OpenFPL’s ensembles showed parity with a commercial system and particularly excel for high-return players when evaluated prospectively across multiple horizons, which is exactly the decision-making zone you care about. 
+arXiv
+
+4.2 Match model
+
+Train a hybrid:
+
+Team strength: rolling xG for/against, schedule-adjusted; ELO-like decay.
+
+Availability: projected XI, injuries/suspensions; travel/rest.
+
+Book-keeping: home/away, weather, stage (group vs knockout).
+
+Targets: win/draw/loss logits, expected goals (Poisson or XGBoost regression), over/under lines.
+
+Calibrate with isotonic/Platt on validation weeks.
+
+4.3 Feature template (multi-horizon, position-aware)
+
+Adopt OpenFPL’s multi-horizon philosophy (1/3/5/10/38-match windows) and position-specific feature sets (GK, DEF, MID, FWD) adapted to UCL context; their paper explicitly defines different inputs per position and aggregates over horizons. 
+arXiv
+
+5) System architecture
+5.1 Data & orchestration
+
+Ingestion DAGs (Airflow):
+
+Fixtures/teams/squads from football-data.org (UCL).
+
+Events & player stats: StatsBomb Open Data for pretraining; API-Football for UCL live/prod (if enabled). 
+api-football
++3
+Football Data
++3
+Football Data
++3
+
+Processing: PySpark on Kubernetes; stream live updates via Kafka; high-QPS caches in Redis (exactly the stack you used).
+
+Warehouse: Snowflake/BigQuery; feature store via Feast (or homegrown tables).
+
+MLOps: MLflow for runs/models; Docker images; Terraform for infra.
+
+5.2 Training & evaluation
+
+Training jobs:
+
+L1 CatBoost action model, xG classifier.
+
+L2 position-specific ensembles (XGBoost + RF) like OpenFPL; hyperparam search via K-Best or Optuna. OpenFPL used K-Best Search to optimize XGBoost/RF and then ensembled top-K across folds. 
+arXiv
+
+Eval: hold-back gameweeks; RMSE/MAE for regression, Brier/log-loss for match probs; calibration curves; prospective weekly evaluation à la OpenFPL. 
+arXiv
+
+5.3 Serving
+
+FastAPI microservices:
+
+/predict/match?fixture_id=…
+
+/predict/player?match_id=…&player_id=…
+
+Online features: Redis lookups; message bus triggers updates pre-kickoff; optional live path consumes events (Pub/Sub/Kafka) to refresh in-game probabilities.
+
+Monitoring: Prometheus + Grafana; drift alerts on feature distributions and calibration.
+
+6) Data model (abridged)
+
+ucl_fixtures(fixture_id, home_id, away_id, date, stage, …)
+
+ucl_events(match_id, team_id, player_id, action_type, x, y, second, pressure, outcome, …)
+
+player_features(player_id, horizon, mins, xG90, xA90, key_passes90, chain_value90, …)
+
+opponent_features(team_id, horizon, xGA90, PPDA, rest_days, travel_km, …)
+
+predictions_match(fixture_id, p_home, p_draw, p_away, exg_home, exg_away, …)
+
+predictions_player(match_id, player_id, exp_contribution, exp_minutes, var, …)
+
+7) Champions League specifics
+
+Format/stage features: group vs knockouts, away-goals irrelevant, extra-time likelihood; seeded paths.
+
+Rotation risk: model “minutes” explicitly (OpenFPL used availability categories for minutes proxy—create your UCL proxy via historical starts/subs, stage importance, and travel). 
+arXiv
+
+Cross-league transfers: handle domain shift when players come from different leagues (normalize stats by league strength).
+
+8) How this ties to your resume (say this explicitly)
+
+Distributed compute: “Built PySpark pipelines on K8s; Kafka + Redis for streaming/caching; throughput +35% on enterprise workloads.” Mirrors our live data + low-latency serving path.
+
+MLOps @ scale: “Azure ML → Databricks → Snowflake” and Terraform/Kafka—drop in as infra blocks above.
+
+PyTorch+CUDA: you’ve optimized RL training; reuse for GPU-accelerated xG or sequence models (e.g., Transformers for sequence of actions).
+
+Quant/sim: your FlowExec++ experience with stochastic simulators → perfect for Monte-Carlo scoreline simulation around xG distributions.
+
+9) Why OpenFPL + the possession-chain paper?
+
+OpenFPL: public-data, position-specific ensembles, multi-horizon features, and prospective head-to-head vs a top commercial model (accuracy parity; best on high-return players). Use its methodology and repo skeleton; the repo shows “Custom data” instructions and MIT license. 
+arXiv
++1
+
+Transfer-fee paper: clean math for valuing every action in a possession chain and a practical CatBoost implementation for xG and goal-probability link—ideal to produce player “value” beyond simple shots/goals. 
+arXiv
++1
+
+10) Project plan (you can say this timeline on the call)
+
+Week 1–2: stand up ingestion (football-data.org UCL + API-Football dev key), warehouse schemas, Airflow DAGs. 
+Football Data
++2
+Football Data
++2
+
+Week 3–4: pretrain CatBoost xG + goal-prob models on StatsBomb Open Data (Euro 2025), validate. 
+GitHub
++1
+
+Week 5–6: build L2 position-specific ensembles (OpenFPL recipe), backtest on early UCL weeks; add minutes model. 
+arXiv
+
+Week 7: deploy FastAPI services, Redis cache; basic dashboard.
+
+Week 8+: live event loop; calibration monitoring; ablations.
+
+11) Example tech stack (map to your bullets)
+
+Data: Airflow, PySpark, Kafka, Redis, Snowflake/BigQuery.
+
+ML: CatBoost, XGBoost, RandomForest (OpenFPL), PyTorch (optionals), MLflow.
+
+Infra: Docker, K8s, Terraform; GCP equivalents (Pub/Sub, GKE, BigQuery) or AWS (MSK/EKS/Snowflake).
+
+Serving: FastAPI; Grafana/Prometheus for SLOs.
+
+12) Extra “plus” ideas (if they ask for extensions)
+
+Minutes model: gradient-boosted classifier for start/sub/bench with features = stage importance, congestion, travel, fatigue; this mimics OpenFPL’s “availability” proxy in a UCL-specific way. 
+arXiv
+
+Player similarity search: ANN over action-value embeddings to find “role-equivalents” across leagues for transfer windows.
+
+Simulation tooling: Monte-Carlo match simulator from team xG and finishing variance for market-making or DFS projections.
+
+13) What to show in your repo (readme bullets to impress)
+
+“Implements OpenFPL-style position ensembles with multi-horizon features on UCL data.” 
+arXiv
+
+“Action-value (possession-chain) model per Sulimov et al.; CatBoost xG + goal-prob; outputs normalized player contribution scores.” 
+arXiv
+
+“Real-time service: FastAPI + Redis; Airflow DAGs; K8s manifests; MLflow artifacts.”
+
+14) References you can cite in conversation
+
+OpenFPL paper (method & results; public-data, position-specific ensembles; multi-horizon features; prospective evaluation). 
+arXiv
+
+OpenFPL GitHub (MIT license; “Custom data” notes; starter notebook). 
+GitHub
+
+Transfer-fee paper (possession chains, ΔP(score) per action; CatBoost for xG/goal-prob; features). 
+arXiv
++1
+
+football-data.org (UCL API coverage). 
+Football Data
+
+StatsBomb Open Data (free events; Euro 2025 comp available). 
+GitHub
++1
+
+API-Football (paid, production-grade feed). 
+api-football
+
+15) How to talk about this with Kyle/Jay tomorrow
+
+Lead with decision impact: “We can produce calibrated, real-time probabilities on UCL fixtures and player contributions, with ensembles that have shown parity with commercial systems in prospective tests.” 
+arXiv
+
+Emphasize MLOps maturity: describe the exact DAGs, Docker/K8s artifacts, and Redis/Kafka topology (this mirrors your KSE bullets).
+
+Show one mini-demo: a notebook that calls /predict/match for a high-profile fixture and /predict/player for 3–5 starters, with feature prints and confidence intervals.
+
+Tie back to PrizePicks: outputs wire cleanly into pricing/market-risk or DFS projection services; model monitoring keeps calibration drift in check.
+
+Appendix: What from OpenFPL we’re reusing
+
+Position-specific ensembles; multi-horizon features; prospective evaluation cadence; MIT-licensed code scaffolding (samples, play.ipynb, “Custom data” guidance). 
+arXiv
++1
+
+Appendix: Why we can train xG/action models without UCL events
+
+StatsBomb Open Data releases high-quality competitions (e.g., Euro 2025). Pretrain xG + goal-probability on those; fine-tune/calibrate on whatever UCL event/stat feed you have. 
+GitHub
++1
