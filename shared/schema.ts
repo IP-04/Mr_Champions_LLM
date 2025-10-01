@@ -1,6 +1,28 @@
-import { pgTable, text, varchar, integer, real, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, real, timestamp, boolean, index, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { sql } from "drizzle-orm";
+
+// Auth tables - Required for Replit Auth (from blueprint:javascript_log_in_with_replit)
+export const sessions = pgTable(
+  "sessions",
+  {
+    sid: varchar("sid").primaryKey(),
+    sess: jsonb("sess").notNull(),
+    expire: timestamp("expire").notNull(),
+  },
+  (table) => [index("IDX_session_expire").on(table.expire)],
+);
+
+export const users = pgTable("users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: varchar("email").unique(),
+  firstName: varchar("first_name"),
+  lastName: varchar("last_name"),
+  profileImageUrl: varchar("profile_image_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
 
 export const matches = pgTable("matches", {
   id: varchar("id").primaryKey(),
@@ -53,6 +75,7 @@ export const leaderboard = pgTable("leaderboard", {
 
 export const userPicks = pgTable("user_picks", {
   id: varchar("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
   playerId: varchar("player_id").notNull(),
   pickType: text("pick_type").notNull(),
   statLine: real("stat_line").notNull(),
@@ -75,3 +98,7 @@ export type LeaderboardEntry = typeof leaderboard.$inferSelect;
 export type InsertLeaderboardEntry = z.infer<typeof insertLeaderboardSchema>;
 export type UserPick = typeof userPicks.$inferSelect;
 export type InsertUserPick = z.infer<typeof insertUserPickSchema>;
+
+// Auth types (from blueprint:javascript_log_in_with_replit)
+export type UpsertUser = typeof users.$inferInsert;
+export type User = typeof users.$inferSelect;

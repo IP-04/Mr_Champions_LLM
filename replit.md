@@ -24,11 +24,16 @@ Preferred communication style: Simple, everyday language.
 
 ### Backend Architecture
 
-**Express Server**: A Node.js Express server handles API routing and serves the built frontend in production. The server implements middleware for JSON parsing, request logging with duration tracking, and error handling.
+**Express Server**: A Node.js Express server handles API routing and serves the built frontend in production. The server implements middleware for JSON parsing, request logging with duration tracking, error handling, and session management via Passport.js with PostgreSQL session storage.
 
-**Storage Abstraction Layer**: The backend uses an interface-based storage pattern (`IStorage`) that currently implements an in-memory storage solution (`MemStorage`) with mock data. This abstraction allows for easy swapping to database-backed persistence without changing API route handlers.
+**Authentication System**: Replit Auth integration provides OpenID Connect authentication supporting Google, GitHub, Apple, and email/password login. User sessions are persisted in PostgreSQL with automatic token refresh. Protected routes use the `isAuthenticated` middleware to verify authentication state.
+
+**Storage Abstraction Layer**: The backend uses an interface-based storage pattern (`IStorage`) implemented with PostgreSQL via Drizzle ORM (`DbStorage`). The storage layer handles all CRUD operations for matches, players, leaderboard entries, user picks, and user accounts.
 
 **API Design**: RESTful API endpoints follow resource-based conventions:
+- `/api/auth/user` - Get authenticated user details (protected)
+- `/api/login` - Initiate authentication flow
+- `/api/logout` - End user session
 - `/api/matches` - Match fixtures and predictions
 - `/api/players` - Player forecasts with position filtering
 - `/api/feature-importance/:matchId` - Model explanation data
@@ -74,11 +79,12 @@ The schema uses varchar primary keys (UUIDs or custom IDs), real/float types for
 **Database & Session**:
 - **@neondatabase/serverless**: PostgreSQL client optimized for serverless/edge environments
 - **Drizzle ORM**: Type-safe SQL query builder and ORM
-- **connect-pg-simple**: PostgreSQL session store (configured but not actively used in current implementation)
+- **connect-pg-simple**: PostgreSQL session store for Replit Auth sessions
+- **Passport.js**: Authentication middleware with OpenID Connect strategy
 
-**Planned External Data Sources** (from project documentation):
-- **football-data.org API**: Primary source for UCL fixtures, standings, lineups (REST v4, free tier)
-- **StatsBomb Open Data**: Event data for pre-training xG models
-- **API-Football** (optional paid upgrade): Richer live events and player statistics
+**External Data Sources**:
+- **football-data.org API**: Primary source for UCL fixtures, teams, and squad data (REST v4, free tier) - **Integrated and syncing live data**
+- **StatsBomb Open Data**: Event data for pre-training xG models (planned)
+- **API-Football** (optional paid upgrade): Richer live events and player statistics (planned)
 
-The current implementation uses mock data in memory but is architected to integrate with these external APIs for real match and player data once the prediction models are deployed.
+The application now integrates real match and player data from football-data.org API, with predictions calculated by an MVP statistical model using team strength ratings and expected goals algorithms.

@@ -1,10 +1,14 @@
-import { type Match, type InsertMatch, type Player, type InsertPlayer, type FeatureImportance, type InsertFeatureImportance, type LeaderboardEntry, type InsertLeaderboardEntry, type UserPick, type InsertUserPick } from "@shared/schema";
-import { matches, players, featureImportance, leaderboard, userPicks } from "@shared/schema";
+import { type Match, type InsertMatch, type Player, type InsertPlayer, type FeatureImportance, type InsertFeatureImportance, type LeaderboardEntry, type InsertLeaderboardEntry, type UserPick, type InsertUserPick, type User, type UpsertUser } from "@shared/schema";
+import { matches, players, featureImportance, leaderboard, userPicks, users } from "@shared/schema";
 import { db } from "../db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 export interface IStorage {
+  // User operations (Required for Replit Auth - blueprint:javascript_log_in_with_replit)
+  getUser(id: string): Promise<User | undefined>;
+  upsertUser(user: UpsertUser): Promise<User>;
+  
   // Matches
   getMatches(): Promise<Match[]>;
   getMatch(id: string): Promise<Match | undefined>;
@@ -22,15 +26,36 @@ export interface IStorage {
   getLeaderboard(): Promise<LeaderboardEntry[]>;
   
   // User Picks
-  getUserPicks(): Promise<UserPick[]>;
+  getUserPicks(userId: string): Promise<UserPick[]>;
   createUserPick(pick: InsertUserPick): Promise<UserPick>;
-  deleteUserPick(id: string): Promise<void>;
+  deleteUserPick(id: string, userId: string): Promise<void>;
   
   // Initialization
   seedMockData(): Promise<void>;
 }
 
 export class DbStorage implements IStorage {
+  // User operations (Required for Replit Auth - blueprint:javascript_log_in_with_replit)
+  async getUser(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async upsertUser(userData: UpsertUser): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values(userData)
+      .onConflictDoUpdate({
+        target: users.id,
+        set: {
+          ...userData,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return user;
+  }
+
   async seedMockData(): Promise<void> {
     // Check if data already exists
     const existingMatches = await db.select().from(matches).limit(1);
@@ -225,8 +250,8 @@ export class DbStorage implements IStorage {
     return await db.select().from(leaderboard);
   }
 
-  async getUserPicks(): Promise<UserPick[]> {
-    return await db.select().from(userPicks);
+  async getUserPicks(userId: string): Promise<UserPick[]> {
+    return await db.select().from(userPicks).where(eq(userPicks.userId, userId));
   }
 
   async createUserPick(insertPick: InsertUserPick): Promise<UserPick> {
@@ -236,8 +261,8 @@ export class DbStorage implements IStorage {
     return pick as UserPick;
   }
 
-  async deleteUserPick(id: string): Promise<void> {
-    await db.delete(userPicks).where(eq(userPicks.id, id));
+  async deleteUserPick(id: string, userId: string): Promise<void> {
+    await db.delete(userPicks).where(and(eq(userPicks.id, id), eq(userPicks.userId, userId)));
   }
 }
 
