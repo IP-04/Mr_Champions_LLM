@@ -1,4 +1,7 @@
 import { type Match, type InsertMatch, type Player, type InsertPlayer, type FeatureImportance, type InsertFeatureImportance, type LeaderboardEntry, type InsertLeaderboardEntry, type UserPick, type InsertUserPick } from "@shared/schema";
+import { matches, players, featureImportance, leaderboard, userPicks } from "@shared/schema";
+import { db } from "../db";
+import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 export interface IStorage {
@@ -22,27 +25,21 @@ export interface IStorage {
   getUserPicks(): Promise<UserPick[]>;
   createUserPick(pick: InsertUserPick): Promise<UserPick>;
   deleteUserPick(id: string): Promise<void>;
+  
+  // Initialization
+  seedMockData(): Promise<void>;
 }
 
-export class MemStorage implements IStorage {
-  private matches: Map<string, Match>;
-  private players: Map<string, Player>;
-  private featureImportance: Map<string, FeatureImportance>;
-  private leaderboardEntries: Map<string, LeaderboardEntry>;
-  private userPicks: Map<string, UserPick>;
+export class DbStorage implements IStorage {
+  async seedMockData(): Promise<void> {
+    // Check if data already exists
+    const existingMatches = await db.select().from(matches).limit(1);
+    if (existingMatches.length > 0) {
+      return; // Already seeded
+    }
 
-  constructor() {
-    this.matches = new Map();
-    this.players = new Map();
-    this.featureImportance = new Map();
-    this.leaderboardEntries = new Map();
-    this.userPicks = new Map();
-    this.initializeMockData();
-  }
-
-  private initializeMockData() {
     // Mock Matches
-    const match1: Match = {
+    const match1: InsertMatch = {
       id: "match-1",
       homeTeam: "Man City",
       awayTeam: "Bayern",
@@ -60,7 +57,7 @@ export class MemStorage implements IStorage {
       confidence: 87.3,
     };
 
-    const match2: Match = {
+    const match2: InsertMatch = {
       id: "match-2",
       homeTeam: "Real Madrid",
       awayTeam: "Inter",
@@ -78,11 +75,10 @@ export class MemStorage implements IStorage {
       confidence: 91.5,
     };
 
-    this.matches.set(match1.id, match1);
-    this.matches.set(match2.id, match2);
+    await db.insert(matches).values([match1, match2]);
 
     // Mock Players
-    const players: Player[] = [
+    const mockPlayers: InsertPlayer[] = [
       {
         id: "player-1",
         name: "E. Haaland",
@@ -137,10 +133,10 @@ export class MemStorage implements IStorage {
       },
     ];
 
-    players.forEach(player => this.players.set(player.id, player));
+    await db.insert(players).values(mockPlayers);
 
     // Mock Feature Importance
-    const features: FeatureImportance[] = [
+    const features: InsertFeatureImportance[] = [
       { id: "f-1", matchId: "match-1", featureName: "Home Form Advantage", importance: 75, impact: 0.12 },
       { id: "f-2", matchId: "match-1", featureName: "Recent Performance", importance: 55, impact: 0.08 },
       { id: "f-3", matchId: "match-1", featureName: "Opponent Defensive Rating", importance: 40, impact: -0.06 },
@@ -148,10 +144,10 @@ export class MemStorage implements IStorage {
       { id: "f-5", matchId: "match-1", featureName: "Travel & Rest Days", importance: 20, impact: -0.03 },
     ];
 
-    features.forEach(f => this.featureImportance.set(f.id, f));
+    await db.insert(featureImportance).values(features);
 
     // Mock Leaderboard
-    const leaderboardData: LeaderboardEntry[] = [
+    const leaderboardData: InsertLeaderboardEntry[] = [
       {
         id: "l-1",
         username: "Alex_UCL",
@@ -186,61 +182,63 @@ export class MemStorage implements IStorage {
       },
     ];
 
-    leaderboardData.forEach(l => this.leaderboardEntries.set(l.id, l));
+    await db.insert(leaderboard).values(leaderboardData);
   }
 
   async getMatches(): Promise<Match[]> {
-    return Array.from(this.matches.values());
+    return await db.select().from(matches);
   }
 
   async getMatch(id: string): Promise<Match | undefined> {
-    return this.matches.get(id);
+    const result = await db.select().from(matches).where(eq(matches.id, id)).limit(1);
+    return result[0];
   }
 
   async createMatch(insertMatch: InsertMatch): Promise<Match> {
-    const id = randomUUID();
-    const match: Match = { ...insertMatch, id };
-    this.matches.set(id, match);
-    return match;
+    const id = insertMatch.id || randomUUID();
+    const match = { ...insertMatch, id };
+    await db.insert(matches).values(match);
+    return match as Match;
   }
 
   async getPlayers(): Promise<Player[]> {
-    return Array.from(this.players.values());
+    return await db.select().from(players);
   }
 
   async getPlayersByPosition(position: string): Promise<Player[]> {
     if (position === "ALL") {
       return this.getPlayers();
     }
-    return Array.from(this.players.values()).filter(p => p.position === position);
+    return await db.select().from(players).where(eq(players.position, position));
   }
 
   async getPlayer(id: string): Promise<Player | undefined> {
-    return this.players.get(id);
+    const result = await db.select().from(players).where(eq(players.id, id)).limit(1);
+    return result[0];
   }
 
   async getFeatureImportanceByMatch(matchId: string): Promise<FeatureImportance[]> {
-    return Array.from(this.featureImportance.values()).filter(f => f.matchId === matchId);
+    return await db.select().from(featureImportance).where(eq(featureImportance.matchId, matchId));
   }
 
   async getLeaderboard(): Promise<LeaderboardEntry[]> {
-    return Array.from(this.leaderboardEntries.values()).sort((a, b) => a.rank - b.rank);
+    return await db.select().from(leaderboard);
   }
 
   async getUserPicks(): Promise<UserPick[]> {
-    return Array.from(this.userPicks.values());
+    return await db.select().from(userPicks);
   }
 
   async createUserPick(insertPick: InsertUserPick): Promise<UserPick> {
     const id = randomUUID();
-    const pick: UserPick = { ...insertPick, id };
-    this.userPicks.set(id, pick);
-    return pick;
+    const pick = { ...insertPick, id };
+    await db.insert(userPicks).values(pick);
+    return pick as UserPick;
   }
 
   async deleteUserPick(id: string): Promise<void> {
-    this.userPicks.delete(id);
+    await db.delete(userPicks).where(eq(userPicks.id, id));
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DbStorage();
