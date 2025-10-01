@@ -52,13 +52,13 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // Seed mock data on startup (fallback)
-  await storage.seedMockData();
-  
-  // Sync real Champions League data
+  // Sync real Champions League data first
   const { dataSyncService } = await import("./services/dataSync");
   await dataSyncService.syncChampionsLeagueMatches();
   await dataSyncService.syncTeamPlayers();
+  
+  // Only seed mock data if no real data exists (fallback)
+  await storage.seedMockData();
   
   const server = await registerRoutes(app);
 

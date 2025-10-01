@@ -3,12 +3,44 @@ import { useRoute, useLocation } from "wouter";
 import { type Match, type FeatureImportance } from "@shared/schema";
 import { Header } from "@/components/header";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import useEmblaCarousel from 'embla-carousel-react';
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 export default function MatchDetail() {
   const [, params] = useRoute("/match/:id");
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState<"outcome" | "stats" | "players">("outcome");
+  const [selectedTeam, setSelectedTeam] = useState<"home" | "away">("home");
+  const [viewMode, setViewMode] = useState<"grid" | "carousel">("carousel");
+  
+  // Carousel setup
+  const [emblaRef, emblaApi] = useEmblaCarousel({ 
+    loop: false,
+    dragFree: true,
+    containScroll: "trimSnaps",
+    slidesToScroll: 1,
+    align: "start"
+  });
+
+  const [canScrollPrev, setCanScrollPrev] = useState(false);
+  const [canScrollNext, setCanScrollNext] = useState(false);
+
+  const scrollPrev = () => emblaApi && emblaApi.scrollPrev();
+  const scrollNext = () => emblaApi && emblaApi.scrollNext();
+
+  const onSelect = () => {
+    if (!emblaApi) return;
+    setCanScrollPrev(emblaApi.canScrollPrev());
+    setCanScrollNext(emblaApi.canScrollNext());
+  };
+
+  useEffect(() => {
+    if (!emblaApi) return;
+    onSelect();
+    emblaApi.on("reInit", onSelect);
+    emblaApi.on("select", onSelect);
+  }, [emblaApi, onSelect]);
 
   const { data: match, isLoading: matchLoading } = useQuery<Match>({
     queryKey: ["/api/matches", params?.id],
@@ -18,6 +50,122 @@ export default function MatchDetail() {
     queryKey: ["/api/feature-importance", params?.id],
     enabled: !!params?.id,
   });
+
+  // Mock player forecasts data for demonstration
+  const mockPlayerForecasts = [
+    {
+      id: 1,
+      name: "Erling Haaland",
+      position: "ST",
+      team: match?.homeTeam || "Man City",
+      forecasts: {
+        goals: 1.2,
+        assists: 0.3,
+        rating: 8.4,
+        shots: 4.1,
+        passes: 35.2,
+        passAccuracy: 0.85
+      }
+    },
+    {
+      id: 2,
+      name: "Kevin De Bruyne",
+      position: "MID",
+      team: match?.homeTeam || "Man City",
+      forecasts: {
+        goals: 0.4,
+        assists: 0.8,
+        rating: 8.1,
+        shots: 2.3,
+        passes: 68.5,
+        passAccuracy: 0.89
+      }
+    },
+    {
+      id: 3,
+      name: "Phil Foden",
+      position: "LW",
+      team: match?.homeTeam || "Man City",
+      forecasts: {
+        goals: 0.6,
+        assists: 0.5,
+        rating: 7.8,
+        shots: 3.2,
+        passes: 45.1,
+        passAccuracy: 0.87
+      }
+    },
+    {
+      id: 4,
+      name: "Jack Grealish",
+      position: "LW",
+      team: match?.homeTeam || "Man City",
+      forecasts: {
+        goals: 0.3,
+        assists: 0.6,
+        rating: 7.5,
+        shots: 2.1,
+        passes: 42.8,
+        passAccuracy: 0.91
+      }
+    },
+    {
+      id: 5,
+      name: "Kylian Mbappé",
+      position: "ST",
+      team: match?.awayTeam || "PSG",
+      forecasts: {
+        goals: 1.1,
+        assists: 0.4,
+        rating: 8.3,
+        shots: 4.5,
+        passes: 28.7,
+        passAccuracy: 0.82
+      }
+    },
+    {
+      id: 6,
+      name: "Neymar Jr",
+      position: "LW",
+      team: match?.awayTeam || "PSG",
+      forecasts: {
+        goals: 0.7,
+        assists: 0.9,
+        rating: 8.0,
+        shots: 3.8,
+        passes: 52.3,
+        passAccuracy: 0.88
+      }
+    },
+    {
+      id: 7,
+      name: "Lionel Messi",
+      position: "RW",
+      team: match?.awayTeam || "PSG",
+      forecasts: {
+        goals: 0.8,
+        assists: 0.7,
+        rating: 8.2,
+        shots: 3.5,
+        passes: 58.2,
+        passAccuracy: 0.92
+      }
+    },
+    {
+      id: 8,
+      name: "Marco Verratti",
+      position: "MID",
+      team: match?.awayTeam || "PSG",
+      forecasts: {
+        goals: 0.1,
+        assists: 0.4,
+        rating: 7.6,
+        shots: 1.2,
+        passes: 72.1,
+        passAccuracy: 0.94
+      }
+    }
+  ];
 
   if (matchLoading) {
     return (
@@ -308,10 +456,210 @@ export default function MatchDetail() {
         {/* Players Tab */}
         {activeTab === "players" && (
           <div className="bg-card rounded-2xl border border-border p-6">
-            <h4 className="text-lg font-bold mb-4">Player Performance Forecasts</h4>
-            <p className="text-muted-foreground text-center py-8">
-              Player forecast cards will appear here
-            </p>
+            <h4 className="text-lg font-bold mb-6">Player Performance Forecasts</h4>
+            
+            {/* Team Toggle */}
+            <div className="flex justify-center mb-6">
+              <div className="flex bg-muted rounded-lg p-1">
+                <button
+                  onClick={() => setSelectedTeam("home")}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    selectedTeam === "home"
+                      ? "bg-white shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {match.homeTeam}
+                </button>
+                <button
+                  onClick={() => setSelectedTeam("away")}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    selectedTeam === "away"
+                      ? "bg-white shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {match.awayTeam}
+                </button>
+              </div>
+            </div>
+
+            {/* Player Cards - Conditional View */}
+            {viewMode === 'carousel' ? (
+              /* Carousel Container */
+              <div className="relative">
+                <div className="overflow-hidden" ref={emblaRef}>
+                  <div className="flex">
+                    {mockPlayerForecasts
+                      .filter(player => 
+                        selectedTeam === "home" 
+                          ? player.team === match.homeTeam 
+                          : player.team === match.awayTeam
+                      )
+                      .map((player) => (
+                        <div 
+                          key={player.id} 
+                          className="flex-none w-full sm:w-1/2 lg:w-1/3 xl:w-1/4 px-2"
+                        >
+                          <div className={`border rounded-xl p-4 h-full ${
+                            player.team === match.homeTeam 
+                              ? 'bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200' 
+                              : 'bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200'
+                          }`}>
+                            <div className="flex items-center gap-3 mb-4">
+                              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                                player.team === match.homeTeam 
+                                  ? 'bg-blue-200' 
+                                  : 'bg-purple-200'
+                              }`}>
+                                <span className={`text-lg font-bold ${
+                                  player.team === match.homeTeam 
+                                    ? 'text-blue-800' 
+                                    : 'text-purple-800'
+                                }`}>
+                                  {player.name.split(' ').map((n: string) => n[0]).join('')}
+                                </span>
+                              </div>
+                              <div className="flex-1">
+                                <h5 className="font-semibold">{player.name}</h5>
+                                <p className="text-xs text-muted-foreground">{player.team} • {player.position}</p>
+                              </div>
+                            </div>
+                            
+                            <div className="space-y-3 mb-4">
+                              <div className="flex justify-between text-sm">
+                                <span>Goals</span>
+                                <span className="font-medium">{player.forecasts.goals.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between text-sm">
+                                <span>Assists</span>
+                                <span className="font-medium">{player.forecasts.assists.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between text-sm">
+                                <span>Rating</span>
+                                <span className="font-medium">{player.forecasts.rating.toFixed(1)}</span>
+                              </div>
+                              <div className="flex justify-between text-sm">
+                                <span>Shots</span>
+                                <span className="font-medium">{player.forecasts.shots.toFixed(1)}</span>
+                              </div>
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <div className="text-sm font-medium">Make Your Pick</div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <button className="bg-green-100 hover:bg-green-200 text-green-800 px-3 py-2 rounded-lg text-xs font-semibold transition-colors">
+                                  Over 0.5 Goals
+                                </button>
+                                <button className="bg-red-100 hover:bg-red-200 text-red-800 px-3 py-2 rounded-lg text-xs font-semibold transition-colors">
+                                  Under 0.5 Goals
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+
+                {/* Carousel Navigation */}
+                <button
+                  className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-white shadow-lg rounded-full p-2 z-10 border border-border hover:bg-gray-50 transition-colors"
+                  onClick={scrollPrev}
+                  disabled={!canScrollPrev}
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <button
+                  className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-white shadow-lg rounded-full p-2 z-10 border border-border hover:bg-gray-50 transition-colors"
+                  onClick={scrollNext}
+                  disabled={!canScrollNext}
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+            ) : (
+              /* Grid Container */
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {mockPlayerForecasts
+                  .filter(player => 
+                    selectedTeam === "home" 
+                      ? player.team === match.homeTeam 
+                      : player.team === match.awayTeam
+                  )
+                  .map((player) => (
+                    <div 
+                      key={player.id} 
+                      className={`border rounded-xl p-4 ${
+                        player.team === match.homeTeam 
+                          ? 'bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200' 
+                          : 'bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                          player.team === match.homeTeam 
+                            ? 'bg-blue-200' 
+                            : 'bg-purple-200'
+                        }`}>
+                          <span className={`text-lg font-bold ${
+                            player.team === match.homeTeam 
+                              ? 'text-blue-800' 
+                              : 'text-purple-800'
+                          }`}>
+                            {player.name.split(' ').map((n: string) => n[0]).join('')}
+                          </span>
+                        </div>
+                        <div className="flex-1">
+                          <h5 className="font-semibold">{player.name}</h5>
+                          <p className="text-xs text-muted-foreground">{player.team} • {player.position}</p>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-3 mb-4">
+                        <div className="flex justify-between text-sm">
+                          <span>Goals</span>
+                          <span className="font-medium">{player.forecasts.goals.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span>Assists</span>
+                          <span className="font-medium">{player.forecasts.assists.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span>Rating</span>
+                          <span className="font-medium">{player.forecasts.rating.toFixed(1)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span>Shots</span>
+                          <span className="font-medium">{player.forecasts.shots.toFixed(1)}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <div className="text-sm font-medium">Make Your Pick</div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button className="bg-green-100 hover:bg-green-200 text-green-800 px-3 py-2 rounded-lg text-xs font-semibold transition-colors">
+                            Over 0.5 Goals
+                          </button>
+                          <button className="bg-red-100 hover:bg-red-200 text-red-800 px-3 py-2 rounded-lg text-xs font-semibold transition-colors">
+                            Under 0.5 Goals
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
+
+            {/* Grid View Toggle */}
+            <div className="flex justify-center mt-6">
+              <button
+                onClick={() => setViewMode(viewMode === 'carousel' ? 'grid' : 'carousel')}
+                className="px-4 py-2 bg-muted text-muted-foreground rounded-lg text-sm font-medium hover:bg-border transition-colors"
+              >
+                Switch to {viewMode === 'carousel' ? 'Grid' : 'Carousel'} View
+              </button>
+            </div>
           </div>
         )}
       </div>

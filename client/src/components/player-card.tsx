@@ -57,17 +57,17 @@ export function PlayerCard({ player }: PlayerCardProps) {
     <div
       data-testid={`card-player-${player.id}`}
       onClick={() => setExpanded(!expanded)}
-      className="bg-card rounded-2xl border border-border p-5 hover:transform hover:-translate-y-1 transition-all duration-300 cursor-pointer min-w-[280px]"
+      className="bg-card rounded-2xl border border-border p-4 hover:transform hover:-translate-y-1 transition-all duration-300 cursor-pointer w-full"
     >
-      <div className="flex items-start justify-between mb-4">
+      <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
           <img
             src={player.imageUrl}
             alt={player.name}
-            className={`w-14 h-14 rounded-full object-cover border-2 border-${positionColor}`}
+            className={`w-12 h-12 rounded-full object-cover border-2 border-${positionColor}`}
           />
           <div>
-            <p className="font-bold">{player.name}</p>
+            <p className="font-bold text-sm">{player.name}</p>
             <p className="text-xs text-muted-foreground">
               {player.team} • {player.position}
             </p>
@@ -78,7 +78,7 @@ export function PlayerCard({ player }: PlayerCardProps) {
         </span>
       </div>
 
-      <div className="mb-4">
+      <div className="mb-3">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs text-muted-foreground">Expected Contribution</span>
           <span className={`text-sm font-bold text-${positionColor}`}>
@@ -88,14 +88,14 @@ export function PlayerCard({ player }: PlayerCardProps) {
         <div className="h-2 bg-muted rounded-full overflow-hidden">
           <div
             className={`h-full bg-gradient-to-r from-${positionColor} to-secondary transition-all duration-500`}
-            style={{ width: `${player.expectedContribution * 10}%` }}
+            style={{ width: `${Math.min(100, player.expectedContribution * 10)}%` }}
           />
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 mb-4">
+      <div className="grid grid-cols-2 gap-2 mb-3">
         <div className="bg-muted rounded-lg p-2">
-          <p className="text-xs text-muted-foreground">Predicted Minutes</p>
+          <p className="text-xs text-muted-foreground">Minutes</p>
           <p className="text-lg font-bold">{player.predictedMinutes}'</p>
         </div>
         <div className="bg-muted rounded-lg p-2">
@@ -104,22 +104,22 @@ export function PlayerCard({ player }: PlayerCardProps) {
         </div>
       </div>
 
-      <div className="border-t border-border pt-4">
+      <div className="border-t border-border pt-3">
         <p className="text-xs text-muted-foreground mb-2">Make Your Pick</p>
-        <div className="flex gap-2">
+        <div className="flex gap-1">
           <button
             data-testid={`button-pick-over-${player.id}`}
             onClick={(e) => {
               e.stopPropagation();
               handlePickToggle(true);
             }}
-            className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${
+            className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all ${
               selectedPick === "over"
                 ? "bg-gradient-to-r from-primary to-secondary text-primary-foreground shadow-lg"
                 : "bg-muted hover:bg-border"
             }`}
           >
-            Over 0.5 {player.statType}
+            Over 0.5
           </button>
           <button
             data-testid={`button-pick-under-${player.id}`}
@@ -127,13 +127,13 @@ export function PlayerCard({ player }: PlayerCardProps) {
               e.stopPropagation();
               handlePickToggle(false);
             }}
-            className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${
+            className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all ${
               selectedPick === "under"
                 ? "bg-gradient-to-r from-primary to-secondary text-primary-foreground shadow-lg"
                 : "bg-muted hover:bg-border"
             }`}
           >
-            Under 0.5 {player.statType}
+            Under 0.5
           </button>
         </div>
       </div>

@@ -96,13 +96,13 @@ export class DataSyncService {
         return;
       }
 
-      // Sync players from first 3 teams (to avoid overwhelming the database)
-      const teamsToSync = teams.slice(0, 3);
+      // Sync players from first 6 teams and more players per team
+      const teamsToSync = teams.slice(0, 6);
 
       for (const team of teamsToSync) {
         if (!team.squad || team.squad.length === 0) continue;
 
-        // Get top 5 players from each team (by position priority: attackers, midfielders, defenders, goalkeepers)
+        // Get top 15 players from each team (more comprehensive squad)
         const positionPriority: Record<string, number> = {
           "Offence": 1,
           "Midfield": 2,
@@ -112,7 +112,7 @@ export class DataSyncService {
 
         const sortedPlayers = team.squad
           .sort((a, b) => (positionPriority[a.position] || 5) - (positionPriority[b.position] || 5))
-          .slice(0, 5);
+          .slice(0, 15); // Increased from 5 to 15
 
         for (const apiPlayer of sortedPlayers) {
           const playerId = `player-${apiPlayer.id}`;
@@ -124,18 +124,25 @@ export class DataSyncService {
           const position = this.mapPosition(apiPlayer.position);
           const teamStrength = predictionService.getTeamStrength(team.name);
           
+          // Enhanced player prediction with more realistic values
+          const baseContribution = predictionService.calculatePlayerExpectedContribution(position, teamStrength, 85, 85);
+          const expectedContribution = position === "FWD" ? baseContribution + Math.random() * 2 :
+                                     position === "MID" ? baseContribution + Math.random() * 1.5 :
+                                     position === "DEF" ? baseContribution + Math.random() * 1 :
+                                     baseContribution + Math.random() * 0.5; // GK
+          
           const player: InsertPlayer = {
             id: playerId,
             name: this.formatPlayerName(apiPlayer.name),
             team: team.shortName || team.name,
             position: position,
-            imageUrl: `https://images.unsplash.com/photo-${Math.floor(Math.random() * 9000000000) + 1000000000}?w=60&h=60&fit=crop&crop=faces`,
-            expectedContribution: predictionService.calculatePlayerExpectedContribution(position, teamStrength, 85, 85),
-            predictedMinutes: position === "GK" ? 90 : Math.floor(Math.random() * 20) + 70,
-            statProbability: Math.floor(Math.random() * 30) + 50,
+            imageUrl: this.getPlayerImageUrl(apiPlayer.name, position),
+            expectedContribution: Math.round(expectedContribution * 10) / 10,
+            predictedMinutes: this.calculatePredictedMinutes(position, teamStrength),
+            statProbability: this.calculateStatProbability(position, teamStrength),
             statType: this.getStatType(position),
-            last5Avg: Math.floor(Math.random() * 30) + 40,
-            stat90: Math.random() * 2 + 0.5,
+            last5Avg: this.calculateLast5Average(position),
+            stat90: this.calculateStat90(position),
           };
 
           await db.insert(players).values(player);
@@ -185,8 +192,70 @@ export class DataSyncService {
     if (parts.length === 1) return fullName;
     
     const firstName = parts[0];
-    const lastName = parts[parts.length - 1];
+    const lastName = parts.slice(1).join(" ");
     return `${firstName[0]}. ${lastName}`;
+  }
+
+  private getPlayerImageUrl(playerName: string, position: string): string {
+    // Generate consistent player images based on name hash
+    const hash = playerName.split('').reduce((a, b) => {
+      a = ((a << 5) - a) + b.charCodeAt(0);
+      return a & a;
+    }, 0);
+    
+    const imageId = Math.abs(hash) % 1000 + 1000000000;
+    return `https://images.unsplash.com/photo-${imageId}?w=60&h=60&fit=crop&crop=faces`;
+  }
+
+  private calculatePredictedMinutes(position: string, teamStrength: number): number {
+    const baseMinutes = position === "GK" ? 90 : 75;
+    const strengthBonus = Math.floor(teamStrength / 10);
+    const randomVariation = Math.floor(Math.random() * 15) - 7;
+    
+    return Math.max(30, Math.min(90, baseMinutes + strengthBonus + randomVariation));
+  }
+
+  private calculateStatProbability(position: string, teamStrength: number): number {
+    const baseProbability: Record<string, number> = {
+      "FWD": 65,
+      "MID": 45,
+      "DEF": 35,
+      "GK": 70,
+    };
+    
+    const base = baseProbability[position] || 50;
+    const strengthBonus = Math.floor(teamStrength / 5) - 15;
+    const randomVariation = Math.floor(Math.random() * 20) - 10;
+    
+    return Math.max(10, Math.min(95, base + strengthBonus + randomVariation));
+  }
+
+  private calculateLast5Average(position: string): number {
+    const baseAverage: Record<string, number> = {
+      "FWD": 65,
+      "MID": 55,
+      "DEF": 45,
+      "GK": 40,
+    };
+    
+    const base = baseAverage[position] || 50;
+    const randomVariation = Math.floor(Math.random() * 30) - 15;
+    
+    return Math.max(20, Math.min(80, base + randomVariation));
+  }
+
+  private calculateStat90(position: string): number {
+    const baseStat: Record<string, number> = {
+      "FWD": 1.2,
+      "MID": 0.8,
+      "DEF": 0.4,
+      "GK": 3.5,
+    };
+    
+    const base = baseStat[position] || 1.0;
+    const randomVariation = (Math.random() - 0.5) * base;
+    
+    return Math.max(0.1, Math.round((base + randomVariation) * 10) / 10);
   }
 }
 

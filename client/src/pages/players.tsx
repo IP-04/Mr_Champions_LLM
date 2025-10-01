@@ -54,22 +54,16 @@ export default function Players() {
           </div>
 
           {isLoading ? (
-            <div className="overflow-x-auto hide-scrollbar pb-4">
-              <div className="flex gap-4">
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="min-w-[280px]">
-                    <Skeleton className="h-96 rounded-2xl" />
-                  </div>
-                ))}
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                <Skeleton key={i} className="h-96 rounded-2xl" />
+              ))}
             </div>
           ) : (
-            <div className="overflow-x-auto hide-scrollbar pb-4">
-              <div className="flex gap-4" style={{ minWidth: "min-content" }}>
-                {players?.map((player) => (
-                  <PlayerCard key={player.id} player={player} />
-                ))}
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {players?.map((player) => (
+                <PlayerCard key={player.id} player={player} />
+              ))}
             </div>
           )}
         </div>
