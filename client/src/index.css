@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: hsl(0, 0%, 7%);
+  --foreground: hsl(0, 0%, 100%);
+  --card: hsl(0, 0%, 12%);
+  --card-foreground: hsl(0, 0%, 100%);
+  --popover: hsl(0, 0%, 12%);
+  --popover-foreground: hsl(0, 0%, 100%);
+  --primary: hsl(150, 100%, 50%);
+  --primary-foreground: hsl(0, 0%, 7%);
+  --secondary: hsl(270, 60%, 60%);
+  --secondary-foreground: hsl(0, 0%, 100%);
+  --muted: hsl(0, 0%, 18%);
+  --muted-foreground: hsl(0, 0%, 76%);
+  --accent: hsl(150, 100%, 50%);
+  --accent-foreground: hsl(0, 0%, 7%);
+  --destructive: hsl(0, 84%, 60%);
+  --destructive-foreground: hsl(0, 0%, 100%);
+  --border: hsl(0, 0%, 18%);
+  --input: hsl(0, 0%, 18%);
+  --ring: hsl(150, 100%, 50%);
+  --radius: 0.75rem;
+  --font-sans: 'Inter', system-ui, sans-serif;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+    font-family: var(--font-sans);
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-card;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(0, 0%, 30%);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(0, 0%, 40%);
+  }
+}
+
+@layer utilities {
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .glow-primary {
+    box-shadow: 0 0 20px hsla(150, 100%, 50%, 0.3);
+  }
+
+  .glow-secondary {
+    box-shadow: 0 0 20px hsla(270, 60%, 60%, 0.3);
+  }
+
+  .stage-badge {
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: hsla(270, 60%, 60%, 0.2);
+    color: hsl(270, 60%, 60%);
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .pulse-live {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+}
