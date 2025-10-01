@@ -48,8 +48,13 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // Seed mock data on startup
+  // Seed mock data on startup (fallback)
   await storage.seedMockData();
+  
+  // Sync real Champions League data
+  const { dataSyncService } = await import("./services/dataSync");
+  await dataSyncService.syncChampionsLeagueMatches();
+  await dataSyncService.syncTeamPlayers();
   
   const server = await registerRoutes(app);
 
