@@ -24,14 +24,87 @@ export default function Home() {
   const upcomingMatches = useMemo(() => {
     if (!matches) return [];
     const now = new Date();
-    return matches.filter(match => {
-      const matchDate = new Date(match.date + ' ' + match.time.replace(' CET', ''));
-      return matchDate >= now;
+    console.log('🔍 DEBUG: Current time:', now.toISOString());
+    console.log('🔍 DEBUG: Total matches received:', matches.length);
+    
+    const filtered = matches.filter(match => {
+      try {
+        console.log(`🔍 DEBUG: Match ${match.homeTeam} vs ${match.awayTeam}:`);
+        console.log(`   Date: ${match.date}, Time: ${match.time}`);
+        
+        let matchDateTime: Date;
+        
+        // Handle different date formats
+        if (match.date === "Today") {
+          // Handle mock "Today" format
+          const todayStr = new Date().toISOString().split('T')[0];
+          const timeStr = match.time.replace(' CET', '').replace(' PM', '').replace(' AM', '');
+          matchDateTime = new Date(`${todayStr}T${timeStr}:00.000Z`);
+        } else if (match.date.includes('-')) {
+          // Handle ISO format (YYYY-MM-DD)
+          const dateTimeString = `${match.date}T${match.time}:00.000Z`;
+          matchDateTime = new Date(dateTimeString);
+        } else {
+          // Handle old format (Oct 21)
+          const currentYear = new Date().getFullYear();
+          const timeStr = match.time.replace(' CET', '');
+          const dateStr = `${match.date} ${currentYear} ${timeStr}`;
+          matchDateTime = new Date(dateStr);
+        }
+        
+        console.log(`   DateTime string created from: ${match.date} + ${match.time}`);
+        
+        // Check if date is valid
+        if (isNaN(matchDateTime.getTime())) {
+          console.log(`   ❌ Invalid date for match: ${match.homeTeam} vs ${match.awayTeam}`);
+          return false;
+        }
+        
+        const isUpcoming = matchDateTime >= now;
+        console.log(`   Parsed: ${matchDateTime.toISOString()}`);
+        console.log(`   Is upcoming: ${isUpcoming}`);
+        return isUpcoming;
+      } catch (error) {
+        console.log(`   ❌ Error parsing date for match: ${match.homeTeam} vs ${match.awayTeam}`, error);
+        return false;
+      }
     }).sort((a, b) => {
-      const dateA = new Date(a.date + ' ' + a.time.replace(' CET', ''));
-      const dateB = new Date(b.date + ' ' + b.time.replace(' CET', ''));
-      return dateA.getTime() - dateB.getTime();
+      // Similar logic for sorting
+      let dateA: Date, dateB: Date;
+      
+      try {
+        if (a.date === "Today") {
+          const todayStr = new Date().toISOString().split('T')[0];
+          const timeStr = a.time.replace(' CET', '').replace(' PM', '').replace(' AM', '');
+          dateA = new Date(`${todayStr}T${timeStr}:00.000Z`);
+        } else if (a.date.includes('-')) {
+          dateA = new Date(`${a.date}T${a.time}:00.000Z`);
+        } else {
+          const currentYear = new Date().getFullYear();
+          const timeStr = a.time.replace(' CET', '');
+          dateA = new Date(`${a.date} ${currentYear} ${timeStr}`);
+        }
+        
+        if (b.date === "Today") {
+          const todayStr = new Date().toISOString().split('T')[0];
+          const timeStr = b.time.replace(' CET', '').replace(' PM', '').replace(' AM', '');
+          dateB = new Date(`${todayStr}T${timeStr}:00.000Z`);
+        } else if (b.date.includes('-')) {
+          dateB = new Date(`${b.date}T${b.time}:00.000Z`);
+        } else {
+          const currentYear = new Date().getFullYear();
+          const timeStr = b.time.replace(' CET', '');
+          dateB = new Date(`${b.date} ${currentYear} ${timeStr}`);
+        }
+        
+        return dateA.getTime() - dateB.getTime();
+      } catch {
+        return 0;
+      }
     });
+    
+    console.log('🔍 DEBUG: Filtered upcoming matches:', filtered.length);
+    return filtered;
   }, [matches]);
 
   // Get actual team count from API
@@ -45,10 +118,9 @@ export default function Home() {
   // Get today's fixtures
   const todayFixtures = useMemo(() => {
     if (!upcomingMatches) return [];
-    const today = new Date().toDateString();
+    const today = new Date().toISOString().split('T')[0]; // Get today's date in YYYY-MM-DD format
     return upcomingMatches.filter(match => {
-      const matchDate = new Date(match.date + ' ' + match.time.replace(' CET', ''));
-      return matchDate.toDateString() === today;
+      return match.date === today;
     });
   }, [upcomingMatches]);
 

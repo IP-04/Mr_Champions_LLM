@@ -97,6 +97,11 @@ export class DataSyncService {
     }
   }
   async syncChampionsLeagueMatches(): Promise<void> {
+    // FORCE COMPLETE RE-SYNC - Clear all existing matches first
+    console.log('🧹 Clearing all existing matches for complete re-sync...');
+    await db.delete(matches).execute();
+    console.log('✅ All existing matches cleared');
+    
     try {
       // Comprehensive debugging first
       console.log('=== STARTING MATCH SYNC DEBUG ===');
@@ -207,8 +212,8 @@ export class DataSyncService {
         return;
       }
 
-      // Sync upcoming matches
-      const matchesToSync = upcomingMatches.slice(0, 15);
+      // Sync ALL upcoming matches (not just 15)
+      const matchesToSync = upcomingMatches.slice(0, 50); // Increased limit
       let syncedCount = 0;
       let skippedCount = 0;
 
@@ -222,8 +227,21 @@ export class DataSyncService {
         
         // Format date and time
         const matchDate = new Date(apiMatch.utcDate);
-        const dateStr = matchDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        const timeStr = matchDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'CET' });
+        console.log(`📅 Raw API date: ${apiMatch.utcDate}`);
+        console.log(`📅 Parsed date object: ${matchDate.toISOString()}`);
+        console.log(`📅 Current date: ${new Date().toISOString()}`);
+        
+        // Store date in ISO format for easier parsing (YYYY-MM-DD)
+        const dateStr = matchDate.toISOString().split('T')[0];
+        // Store time in 24-hour format (HH:MM) 
+        const timeStr = matchDate.toLocaleTimeString('en-US', { 
+          hour: '2-digit', 
+          minute: '2-digit', 
+          hour12: false,
+          timeZone: 'UTC' 
+        });
+        
+        console.log(`📅 Storing date: ${dateStr}, time: ${timeStr}`);
 
         // Generate predictions
         const prediction = predictionService.calculateMatchPrediction(

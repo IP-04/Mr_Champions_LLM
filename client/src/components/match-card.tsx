@@ -17,7 +17,7 @@ export function MatchCard({ match }: MatchCardProps) {
       <div className="flex items-center justify-between mb-4">
         <span className="stage-badge">{match.stage}</span>
         <span className="text-xs text-muted-foreground">
-          {match.date}, {match.time}
+          {new Date(match.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, {match.time}
         </span>
       </div>
 
