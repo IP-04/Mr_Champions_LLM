@@ -1,7 +1,7 @@
 import { type Match, type InsertMatch, type Player, type InsertPlayer, type FeatureImportance, type InsertFeatureImportance, type LeaderboardEntry, type InsertLeaderboardEntry, type UserPick, type InsertUserPick, type User, type UpsertUser } from "@shared/schema";
 import { matches, players, featureImportance, leaderboard, userPicks, users } from "@shared/schema";
 import { db } from "../db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, asc } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 export interface IStorage {
@@ -211,7 +211,7 @@ export class DbStorage implements IStorage {
   }
 
   async getMatches(): Promise<Match[]> {
-    return await db.select().from(matches);
+    return await db.select().from(matches).orderBy(asc(matches.date));
   }
 
   async getMatch(id: string): Promise<Match | undefined> {

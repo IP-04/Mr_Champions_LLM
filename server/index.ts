@@ -54,8 +54,10 @@ app.use((req, res, next) => {
 (async () => {
   // Sync real Champions League data first
   const { dataSyncService } = await import("./services/dataSync");
-  await dataSyncService.syncChampionsLeagueMatches();
-  await dataSyncService.syncTeamPlayers();
+  await dataSyncService.runInitialSync();
+  
+  // Start scheduled data synchronization
+  dataSyncService.startScheduledSync();
   
   // Only seed mock data if no real data exists (fallback)
   await storage.seedMockData();

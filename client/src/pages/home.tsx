@@ -3,11 +3,54 @@ import { type Match } from "@shared/schema";
 import { Header } from "@/components/header";
 import { MatchCard } from "@/components/match-card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useMemo } from "react";
+
+interface TeamsResponse {
+  count: number;
+  teams: string[];
+}
 
 export default function Home() {
   const { data: matches, isLoading } = useQuery<Match[]>({
     queryKey: ["/api/matches"],
   });
+
+  const { data: teamsData, isLoading: teamsLoading } = useQuery<TeamsResponse>({
+    queryKey: ["/api/teams/count"],
+    refetchInterval: 5 * 60 * 1000, // Refetch every 5 minutes
+  });
+
+  // Filter only upcoming matches and calculate dynamic stats
+  const upcomingMatches = useMemo(() => {
+    if (!matches) return [];
+    const now = new Date();
+    return matches.filter(match => {
+      const matchDate = new Date(match.date + ' ' + match.time.replace(' CET', ''));
+      return matchDate >= now;
+    }).sort((a, b) => {
+      const dateA = new Date(a.date + ' ' + a.time.replace(' CET', ''));
+      const dateB = new Date(b.date + ' ' + b.time.replace(' CET', ''));
+      return dateA.getTime() - dateB.getTime();
+    });
+  }, [matches]);
+
+  // Get actual team count from API
+  const activeTeamsCount = teamsData?.count || 0;
+
+  // Get current stage from the most recent match
+  const currentStage = useMemo(() => {
+    return upcomingMatches.find(m => m.stage)?.stage || "League Phase";
+  }, [upcomingMatches]);
+
+  // Get today's fixtures
+  const todayFixtures = useMemo(() => {
+    if (!upcomingMatches) return [];
+    const today = new Date().toDateString();
+    return upcomingMatches.filter(match => {
+      const matchDate = new Date(match.date + ' ' + match.time.replace(' CET', ''));
+      return matchDate.toDateString() === today;
+    });
+  }, [upcomingMatches]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -33,27 +76,29 @@ export default function Home() {
 
       {/* Quick Stats */}
       <section className="px-4 py-4">
-        <div className="max-w-7xl mx-auto grid grid-cols-3 gap-3">
+        <div className="max-w-7xl mx-auto grid grid-cols-2 gap-3">
           <div className="bg-card rounded-xl p-4 border border-border text-center">
-            <p className="text-2xl font-bold text-primary">94.2%</p>
-            <p className="text-xs text-muted-foreground mt-1">Model Accuracy</p>
-          </div>
-          <div className="bg-card rounded-xl p-4 border border-border text-center">
-            <p className="text-2xl font-bold text-secondary">16</p>
+            {teamsLoading ? (
+              <Skeleton className="h-8 w-12 mx-auto mb-1" />
+            ) : (
+              <p className="text-2xl font-bold text-secondary">{activeTeamsCount}</p>
+            )}
             <p className="text-xs text-muted-foreground mt-1">Teams Active</p>
           </div>
           <div className="bg-card rounded-xl p-4 border border-border text-center">
-            <p className="text-2xl font-bold text-foreground">48</p>
-            <p className="text-xs text-muted-foreground mt-1">Matches Left</p>
+            <p className="text-lg font-bold text-foreground">{currentStage}</p>
+            <p className="text-xs text-muted-foreground mt-1">Current Stage</p>
           </div>
         </div>
       </section>
 
-      {/* Match Fixtures */}
+          {/* Match Fixtures */}
       <section className="px-4 py-6">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-bold">Today's Fixtures</h3>
+            <h3 className="text-xl font-bold">
+              {todayFixtures.length > 0 ? "Today's Fixtures" : "Upcoming Fixtures"}
+            </h3>
             <button 
               data-testid="button-view-all-matches"
               className="text-sm text-primary font-semibold hover:underline"
@@ -78,9 +123,22 @@ export default function Home() {
             </div>
           ) : (
             <div className="space-y-4">
-              {matches?.map((match) => (
+              {(todayFixtures.length > 0 ? todayFixtures : upcomingMatches.slice(0, 5))?.map((match) => (
                 <MatchCard key={match.id} match={match} />
               ))}
+              {upcomingMatches.length === 0 && (
+                <div className="bg-card rounded-2xl border border-border p-8 text-center">
+                  <div className="space-y-3">
+                    <h4 className="text-lg font-semibold">No Upcoming Matches</h4>
+                    <p className="text-muted-foreground">
+                      Champions League fixtures are currently being updated. Check back soon for the latest match schedule.
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Current stage: {currentStage} • Teams: {activeTeamsCount}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

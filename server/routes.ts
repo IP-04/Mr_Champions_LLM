@@ -3,13 +3,24 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { insertUserPickSchema } from "@shared/schema";
+import { footballDataApi } from "./services/footballDataApi";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Auth middleware (from blueprint:javascript_log_in_with_replit)
-  await setupAuth(app);
+  // Skip auth setup in local development
+  if (process.env.DISABLE_AUTH !== 'true') {
+    await setupAuth(app);
+  }
 
-  // Auth routes
-  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+  // Auth routes - modify for local development
+  app.get('/api/auth/user', process.env.DISABLE_AUTH === 'true' ? (req: any, res) => {
+    // Mock user for local development
+    res.json({
+      id: 'local-user',
+      email: 'local@example.com',
+      firstName: 'Local',
+      lastName: 'User'
+    });
+  } : isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
@@ -55,6 +66,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/feature-importance/:matchId", async (req, res) => {
     const features = await storage.getFeatureImportanceByMatch(req.params.matchId);
     res.json(features);
+  });
+
+  // Teams count
+  app.get("/api/teams/count", async (_req, res) => {
+    try {
+      const teams = await footballDataApi.getChampionsLeagueTeams();
+      res.json({ 
+        count: teams?.length || 0, 
+        teams: teams?.map((t: any) => t.name) || [] 
+      });
+    } catch (error) {
+      console.error("Error fetching teams count:", error);
+      res.status(500).json({ count: 0, teams: [] });
+    }
   });
 
   // Leaderboard
