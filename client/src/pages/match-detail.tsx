@@ -1,11 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
-import { type Match, type FeatureImportance } from "@shared/schema";
+import { type Match, type FeatureImportance, type Player } from "@shared/schema";
 import { Header } from "@/components/header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useEffect } from "react";
 import useEmblaCarousel from 'embla-carousel-react';
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, User } from "lucide-react";
 
 export default function MatchDetail() {
   const [, params] = useRoute("/match/:id");
@@ -51,121 +51,16 @@ export default function MatchDetail() {
     enabled: !!params?.id,
   });
 
-  // Mock player forecasts data for demonstration
-  const mockPlayerForecasts = [
-    {
-      id: 1,
-      name: "Erling Haaland",
-      position: "ST",
-      team: match?.homeTeam || "Man City",
-      forecasts: {
-        goals: 1.2,
-        assists: 0.3,
-        rating: 8.4,
-        shots: 4.1,
-        passes: 35.2,
-        passAccuracy: 0.85
-      }
-    },
-    {
-      id: 2,
-      name: "Kevin De Bruyne",
-      position: "MID",
-      team: match?.homeTeam || "Man City",
-      forecasts: {
-        goals: 0.4,
-        assists: 0.8,
-        rating: 8.1,
-        shots: 2.3,
-        passes: 68.5,
-        passAccuracy: 0.89
-      }
-    },
-    {
-      id: 3,
-      name: "Phil Foden",
-      position: "LW",
-      team: match?.homeTeam || "Man City",
-      forecasts: {
-        goals: 0.6,
-        assists: 0.5,
-        rating: 7.8,
-        shots: 3.2,
-        passes: 45.1,
-        passAccuracy: 0.87
-      }
-    },
-    {
-      id: 4,
-      name: "Jack Grealish",
-      position: "LW",
-      team: match?.homeTeam || "Man City",
-      forecasts: {
-        goals: 0.3,
-        assists: 0.6,
-        rating: 7.5,
-        shots: 2.1,
-        passes: 42.8,
-        passAccuracy: 0.91
-      }
-    },
-    {
-      id: 5,
-      name: "Kylian Mbappé",
-      position: "ST",
-      team: match?.awayTeam || "PSG",
-      forecasts: {
-        goals: 1.1,
-        assists: 0.4,
-        rating: 8.3,
-        shots: 4.5,
-        passes: 28.7,
-        passAccuracy: 0.82
-      }
-    },
-    {
-      id: 6,
-      name: "Neymar Jr",
-      position: "LW",
-      team: match?.awayTeam || "PSG",
-      forecasts: {
-        goals: 0.7,
-        assists: 0.9,
-        rating: 8.0,
-        shots: 3.8,
-        passes: 52.3,
-        passAccuracy: 0.88
-      }
-    },
-    {
-      id: 7,
-      name: "Lionel Messi",
-      position: "RW",
-      team: match?.awayTeam || "PSG",
-      forecasts: {
-        goals: 0.8,
-        assists: 0.7,
-        rating: 8.2,
-        shots: 3.5,
-        passes: 58.2,
-        passAccuracy: 0.92
-      }
-    },
-    {
-      id: 8,
-      name: "Marco Verratti",
-      position: "MID",
-      team: match?.awayTeam || "PSG",
-      forecasts: {
-        goals: 0.1,
-        assists: 0.4,
-        rating: 7.6,
-        shots: 1.2,
-        passes: 72.1,
-        passAccuracy: 0.94
-      }
-    }
-  ];
+  // Fetch all players and filter by match teams
+  const { data: allPlayers, isLoading: playersLoading } = useQuery<Player[]>({
+    queryKey: ["/api/players"],
+    enabled: !!match,
+  });
+
+  // Filter players by the teams in this match
+  const matchPlayers = allPlayers?.filter(player => 
+    player.team === match?.homeTeam || player.team === match?.awayTeam
+  ) || [];
 
   if (matchLoading) {
     return (
@@ -445,11 +340,273 @@ export default function MatchDetail() {
 
         {/* Stats Tab */}
         {activeTab === "stats" && (
-          <div className="bg-card rounded-2xl border border-border p-6">
-            <h4 className="text-lg font-bold mb-4">Team Statistics Comparison</h4>
-            <p className="text-muted-foreground text-center py-8">
-              Team stats comparison visualization
-            </p>
+          <div className="space-y-6">
+            {/* Attack vs Defense Comparison */}
+            <div className="bg-card rounded-2xl border border-border p-6">
+              <h4 className="text-lg font-bold mb-6">Attack vs Defense</h4>
+              
+              <div className="space-y-6">
+                {/* Expected Goals Comparison */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-medium text-primary">{match.homeTeam}</span>
+                    <span className="text-xs text-muted-foreground">Expected Goals (xG)</span>
+                    <span className="text-sm font-medium text-secondary">{match.awayTeam}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg font-bold text-primary w-12 text-right">{match.homeXg}</span>
+                    <div className="flex-1 h-8 bg-muted rounded-full overflow-hidden flex">
+                      <div 
+                        className="bg-gradient-to-r from-primary to-primary/70 flex items-center justify-center"
+                        style={{ width: `${(match.homeXg / (match.homeXg + match.awayXg)) * 100}%` }}
+                      >
+                        <span className="text-xs font-bold text-primary-foreground">
+                          {((match.homeXg / (match.homeXg + match.awayXg)) * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                      <div 
+                        className="bg-gradient-to-l from-secondary to-secondary/70 flex items-center justify-center"
+                        style={{ width: `${(match.awayXg / (match.homeXg + match.awayXg)) * 100}%` }}
+                      >
+                        <span className="text-xs font-bold text-secondary-foreground">
+                          {((match.awayXg / (match.homeXg + match.awayXg)) * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                    </div>
+                    <span className="text-lg font-bold text-secondary w-12">{match.awayXg}</span>
+                  </div>
+                </div>
+
+                {/* Win Probability Comparison */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-medium text-primary">{match.homeTeam}</span>
+                    <span className="text-xs text-muted-foreground">Win Probability</span>
+                    <span className="text-sm font-medium text-secondary">{match.awayTeam}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg font-bold text-primary w-12 text-right">{match.homeWinProb}%</span>
+                    <div className="flex-1 h-8 bg-muted rounded-full overflow-hidden flex">
+                      <div 
+                        className="bg-gradient-to-r from-primary to-primary/70 flex items-center justify-center"
+                        style={{ width: `${match.homeWinProb}%` }}
+                      >
+                        {match.homeWinProb > 15 && (
+                          <span className="text-xs font-bold text-primary-foreground">
+                            {match.homeWinProb}%
+                          </span>
+                        )}
+                      </div>
+                      <div 
+                        className="bg-muted-foreground/30 flex items-center justify-center"
+                        style={{ width: `${match.drawProb}%` }}
+                      >
+                        {match.drawProb > 10 && (
+                          <span className="text-xs font-bold text-foreground">
+                            {match.drawProb}%
+                          </span>
+                        )}
+                      </div>
+                      <div 
+                        className="bg-gradient-to-l from-secondary to-secondary/70 flex items-center justify-center"
+                        style={{ width: `${match.awayWinProb}%` }}
+                      >
+                        {match.awayWinProb > 15 && (
+                          <span className="text-xs font-bold text-secondary-foreground">
+                            {match.awayWinProb}%
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <span className="text-lg font-bold text-secondary w-12">{match.awayWinProb}%</span>
+                  </div>
+                </div>
+
+                {/* Confidence Level */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-medium">Prediction Confidence</span>
+                    <span className="text-sm font-bold text-accent">{match.confidence}%</span>
+                  </div>
+                  <div className="h-3 bg-muted rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-accent to-accent/70 transition-all duration-500"
+                      style={{ width: `${match.confidence}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Based on {features?.length || 0} key factors and historical performance data
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Team Strengths Grid */}
+            <div className="bg-card rounded-2xl border border-border p-6">
+              <h4 className="text-lg font-bold mb-6">Team Strengths</h4>
+              
+              <div className="grid md:grid-cols-2 gap-6">
+                {/* Home Team */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 mb-4">
+                    <img 
+                      src={match.homeTeamCrest} 
+                      alt={match.homeTeam}
+                      className="w-10 h-10 rounded-full object-cover"
+                    />
+                    <h5 className="text-lg font-bold text-primary">{match.homeTeam}</h5>
+                  </div>
+                  
+                  <div className="bg-primary/5 border border-primary/20 rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm">Attacking Threat</span>
+                      <span className="text-sm font-bold text-primary">
+                        {((match.homeXg / 3) * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-primary"
+                        style={{ width: `${(match.homeXg / 3) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="bg-primary/5 border border-primary/20 rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm">Win Momentum</span>
+                      <span className="text-sm font-bold text-primary">{match.homeWinProb}%</span>
+                    </div>
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-primary"
+                        style={{ width: `${match.homeWinProb}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="bg-primary/5 border border-primary/20 rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm">Home Advantage</span>
+                      <span className="text-sm font-bold text-primary">
+                        {(match.homeWinProb - match.awayWinProb > 0 ? '+' : '')}
+                        {(match.homeWinProb - match.awayWinProb).toFixed(0)}%
+                      </span>
+                    </div>
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-primary"
+                        style={{ width: `${Math.min(Math.max((match.homeWinProb - match.awayWinProb + 50), 0), 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Away Team */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 mb-4">
+                    <img 
+                      src={match.awayTeamCrest} 
+                      alt={match.awayTeam}
+                      className="w-10 h-10 rounded-full object-cover"
+                    />
+                    <h5 className="text-lg font-bold text-secondary">{match.awayTeam}</h5>
+                  </div>
+                  
+                  <div className="bg-secondary/5 border border-secondary/20 rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm">Attacking Threat</span>
+                      <span className="text-sm font-bold text-secondary">
+                        {((match.awayXg / 3) * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-secondary"
+                        style={{ width: `${(match.awayXg / 3) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="bg-secondary/5 border border-secondary/20 rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm">Win Momentum</span>
+                      <span className="text-sm font-bold text-secondary">{match.awayWinProb}%</span>
+                    </div>
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-secondary"
+                        style={{ width: `${match.awayWinProb}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="bg-secondary/5 border border-secondary/20 rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm">Defensive Solidity</span>
+                      <span className="text-sm font-bold text-secondary">
+                        {(100 - (match.homeXg / 3) * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-secondary"
+                        style={{ width: `${100 - (match.homeXg / 3) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Key Matchup Stats */}
+            <div className="bg-card rounded-2xl border border-border p-6">
+              <h4 className="text-lg font-bold mb-6">Key Matchup Insights</h4>
+              
+              <div className="grid md:grid-cols-3 gap-4">
+                <div className="bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 rounded-xl p-4 text-center">
+                  <p className="text-xs text-muted-foreground mb-2">Most Likely Result</p>
+                  <p className="text-2xl font-bold text-primary mb-1">
+                    {match.homeWinProb > match.awayWinProb && match.homeWinProb > match.drawProb 
+                      ? `${match.homeTeam} Win`
+                      : match.awayWinProb > match.homeWinProb && match.awayWinProb > match.drawProb
+                      ? `${match.awayTeam} Win`
+                      : 'Draw'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {Math.max(match.homeWinProb, match.awayWinProb, match.drawProb)}% probability
+                  </p>
+                </div>
+
+                <div className="bg-gradient-to-br from-accent/10 to-accent/5 border border-accent/20 rounded-xl p-4 text-center">
+                  <p className="text-xs text-muted-foreground mb-2">Expected Goal Difference</p>
+                  <p className="text-2xl font-bold text-accent mb-1">
+                    {Math.abs(match.homeXg - match.awayXg).toFixed(1)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {match.homeXg > match.awayXg 
+                      ? `${match.homeTeam} favored`
+                      : match.awayXg > match.homeXg
+                      ? `${match.awayTeam} favored`
+                      : 'Evenly matched'}
+                  </p>
+                </div>
+
+                <div className="bg-gradient-to-br from-secondary/10 to-secondary/5 border border-secondary/20 rounded-xl p-4 text-center">
+                  <p className="text-xs text-muted-foreground mb-2">Match Competitiveness</p>
+                  <p className="text-2xl font-bold text-secondary mb-1">
+                    {(100 - Math.abs(match.homeWinProb - match.awayWinProb)).toFixed(0)}%
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {Math.abs(match.homeWinProb - match.awayWinProb) < 20 
+                      ? 'Very close match'
+                      : Math.abs(match.homeWinProb - match.awayWinProb) < 40
+                      ? 'Competitive match'
+                      : 'One-sided match'}
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -458,208 +615,284 @@ export default function MatchDetail() {
           <div className="bg-card rounded-2xl border border-border p-6">
             <h4 className="text-lg font-bold mb-6">Player Performance Forecasts</h4>
             
-            {/* Team Toggle */}
-            <div className="flex justify-center mb-6">
-              <div className="flex bg-muted rounded-lg p-1">
-                <button
-                  onClick={() => setSelectedTeam("home")}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                    selectedTeam === "home"
-                      ? "bg-white shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {match.homeTeam}
-                </button>
-                <button
-                  onClick={() => setSelectedTeam("away")}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                    selectedTeam === "away"
-                      ? "bg-white shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {match.awayTeam}
-                </button>
+            {playersLoading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {[...Array(8)].map((_, i) => (
+                  <Skeleton key={i} className="h-64" />
+                ))}
               </div>
-            </div>
+            ) : (
+              <>
+                {/* Team Toggle */}
+                <div className="flex justify-center mb-6">
+                  <div className="flex bg-muted rounded-lg p-1">
+                    <button
+                      onClick={() => setSelectedTeam("home")}
+                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                        selectedTeam === "home"
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {match.homeTeam}
+                    </button>
+                    <button
+                      onClick={() => setSelectedTeam("away")}
+                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                        selectedTeam === "away"
+                          ? "bg-secondary text-secondary-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {match.awayTeam}
+                    </button>
+                  </div>
+                </div>
 
-            {/* Player Cards - Conditional View */}
-            {viewMode === 'carousel' ? (
-              /* Carousel Container */
-              <div className="relative">
-                <div className="overflow-hidden" ref={emblaRef}>
-                  <div className="flex">
-                    {mockPlayerForecasts
+                {/* Player Cards - Conditional View */}
+                {viewMode === 'carousel' ? (
+                  /* Carousel Container */
+                  <div className="relative">
+                    <div className="overflow-hidden" ref={emblaRef}>
+                      <div className="flex">
+                        {matchPlayers
+                          .filter(player => 
+                            selectedTeam === "home" 
+                              ? player.team === match.homeTeam 
+                              : player.team === match.awayTeam
+                          )
+                          .map((player) => {
+                            const positionColors = {
+                              FWD: { bg: "from-red-600 to-red-800", text: "text-red-400", border: "border-red-500" },
+                              MID: { bg: "from-green-600 to-green-800", text: "text-green-400", border: "border-green-500" },
+                              DEF: { bg: "from-blue-600 to-blue-800", text: "text-blue-400", border: "border-blue-500" },
+                              GK: { bg: "from-yellow-600 to-yellow-800", text: "text-yellow-400", border: "border-yellow-500" },
+                            };
+                            const positionColor = positionColors[player.position as keyof typeof positionColors] || positionColors.MID;
+
+                            return (
+                              <div 
+                                key={player.id} 
+                                className="flex-none w-full sm:w-1/2 lg:w-1/3 xl:w-1/4 px-2"
+                              >
+                                <div className="relative bg-gradient-to-t from-gray-900 via-gray-800 to-gray-700 rounded-2xl shadow-xl p-4 overflow-hidden border border-gray-700 hover:border-gray-600 transition-all duration-300 h-full">
+                                  {/* FIFA-style card background */}
+                                  <div className={`absolute inset-0 bg-gradient-to-br ${positionColor.bg} opacity-10`} />
+                                  <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-white/5 to-transparent rounded-full -translate-y-16 translate-x-16" />
+                                  
+                                  {/* Position Badge */}
+                                  <div className={`absolute top-3 left-3 px-2 py-1 bg-gradient-to-r ${positionColor.bg} rounded text-white text-xs font-bold shadow-lg z-10`}>
+                                    {player.position}
+                                  </div>
+
+                                  {/* Rating Badge */}
+                                  <div className="absolute top-3 right-3 flex flex-col items-center z-10">
+                                    <div className="text-yellow-400 text-xl font-bold">
+                                      {player.expectedContribution.toFixed(1)}
+                                    </div>
+                                    <div className="text-xs text-gray-300">OVR</div>
+                                  </div>
+
+                                  {/* Player Image */}
+                                  <div className="flex justify-center mt-8 mb-4">
+                                    <div className={`relative w-20 h-20 rounded-full border-2 ${positionColor.border} overflow-hidden shadow-lg`}>
+                                      {player.imageUrl ? (
+                                        <img
+                                          src={player.imageUrl}
+                                          alt={player.name}
+                                          className="w-full h-full object-cover"
+                                          onError={(e) => {
+                                            e.currentTarget.style.display = 'none';
+                                            e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                          }}
+                                        />
+                                      ) : null}
+                                      <div className={`${player.imageUrl ? 'hidden' : ''} w-full h-full bg-gray-600 flex items-center justify-center`}>
+                                        <User className="w-8 h-8 text-gray-400" />
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Player Info */}
+                                  <div className="text-center mb-4">
+                                    <h3 className="text-white font-bold text-sm mb-1">{player.name}</h3>
+                                    <p className="text-gray-400 text-xs">{player.team}</p>
+                                  </div>
+
+                                  {/* Stats */}
+                                  <div className="space-y-2 mb-4">
+                                    <div className="flex justify-between items-center text-xs">
+                                      <span className="text-gray-400">Expected</span>
+                                      <span className={`font-bold ${positionColor.text}`}>
+                                        {player.expectedContribution.toFixed(1)}
+                                      </span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-xs">
+                                      <span className="text-gray-400">Minutes</span>
+                                      <span className="text-white font-medium">{player.predictedMinutes}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-xs">
+                                      <span className="text-gray-400">Probability</span>
+                                      <span className="text-white font-medium">{(player.statProbability * 100).toFixed(0)}%</span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-xs">
+                                      <span className="text-gray-400">Last 5 Avg</span>
+                                      <span className="text-white font-medium">{player.last5Avg.toFixed(1)}</span>
+                                    </div>
+                                  </div>
+
+                                  {/* Pick Buttons */}
+                                  <div className="space-y-2">
+                                    <div className="text-xs font-medium text-gray-400 text-center">Make Your Pick</div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <button className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 text-white px-3 py-2 rounded-lg text-xs font-semibold transition-all shadow-lg">
+                                        Over {player.statType}
+                                      </button>
+                                      <button className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white px-3 py-2 rounded-lg text-xs font-semibold transition-all shadow-lg">
+                                        Under {player.statType}
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+
+                    {/* Carousel Navigation */}
+                    <button
+                      className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-gray-800 shadow-lg rounded-full p-2 z-10 border border-gray-600 hover:bg-gray-700 transition-colors disabled:opacity-30"
+                      onClick={scrollPrev}
+                      disabled={!canScrollPrev}
+                    >
+                      <ChevronLeft className="w-5 h-5 text-white" />
+                    </button>
+                    <button
+                      className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-gray-800 shadow-lg rounded-full p-2 z-10 border border-gray-600 hover:bg-gray-700 transition-colors disabled:opacity-30"
+                      onClick={scrollNext}
+                      disabled={!canScrollNext}
+                    >
+                      <ChevronRight className="w-5 h-5 text-white" />
+                    </button>
+                  </div>
+                ) : (
+                  /* Grid Container */
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {matchPlayers
                       .filter(player => 
                         selectedTeam === "home" 
                           ? player.team === match.homeTeam 
                           : player.team === match.awayTeam
                       )
-                      .map((player) => (
-                        <div 
-                          key={player.id} 
-                          className="flex-none w-full sm:w-1/2 lg:w-1/3 xl:w-1/4 px-2"
-                        >
-                          <div className={`border rounded-xl p-4 h-full ${
-                            player.team === match.homeTeam 
-                              ? 'bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200' 
-                              : 'bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200'
-                          }`}>
-                            <div className="flex items-center gap-3 mb-4">
-                              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                                player.team === match.homeTeam 
-                                  ? 'bg-blue-200' 
-                                  : 'bg-purple-200'
-                              }`}>
-                                <span className={`text-lg font-bold ${
-                                  player.team === match.homeTeam 
-                                    ? 'text-blue-800' 
-                                    : 'text-purple-800'
-                                }`}>
-                                  {player.name.split(' ').map((n: string) => n[0]).join('')}
+                      .map((player) => {
+                        const positionColors = {
+                          FWD: { bg: "from-red-600 to-red-800", text: "text-red-400", border: "border-red-500" },
+                          MID: { bg: "from-green-600 to-green-800", text: "text-green-400", border: "border-green-500" },
+                          DEF: { bg: "from-blue-600 to-blue-800", text: "text-blue-400", border: "border-blue-500" },
+                          GK: { bg: "from-yellow-600 to-yellow-800", text: "text-yellow-400", border: "border-yellow-500" },
+                        };
+                        const positionColor = positionColors[player.position as keyof typeof positionColors] || positionColors.MID;
+
+                        return (
+                          <div 
+                            key={player.id} 
+                            className="relative bg-gradient-to-t from-gray-900 via-gray-800 to-gray-700 rounded-2xl shadow-xl p-4 overflow-hidden border border-gray-700 hover:border-gray-600 transition-all duration-300"
+                          >
+                            {/* FIFA-style card background */}
+                            <div className={`absolute inset-0 bg-gradient-to-br ${positionColor.bg} opacity-10`} />
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-white/5 to-transparent rounded-full -translate-y-16 translate-x-16" />
+                            
+                            {/* Position Badge */}
+                            <div className={`absolute top-3 left-3 px-2 py-1 bg-gradient-to-r ${positionColor.bg} rounded text-white text-xs font-bold shadow-lg z-10`}>
+                              {player.position}
+                            </div>
+
+                            {/* Rating Badge */}
+                            <div className="absolute top-3 right-3 flex flex-col items-center z-10">
+                              <div className="text-yellow-400 text-xl font-bold">
+                                {player.expectedContribution.toFixed(1)}
+                              </div>
+                              <div className="text-xs text-gray-300">OVR</div>
+                            </div>
+
+                            {/* Player Image */}
+                            <div className="flex justify-center mt-8 mb-4">
+                              <div className={`relative w-20 h-20 rounded-full border-2 ${positionColor.border} overflow-hidden shadow-lg`}>
+                                {player.imageUrl ? (
+                                  <img
+                                    src={player.imageUrl}
+                                    alt={player.name}
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = 'none';
+                                      e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                    }}
+                                  />
+                                ) : null}
+                                <div className={`${player.imageUrl ? 'hidden' : ''} w-full h-full bg-gray-600 flex items-center justify-center`}>
+                                  <User className="w-8 h-8 text-gray-400" />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Player Info */}
+                            <div className="text-center mb-4">
+                              <h3 className="text-white font-bold text-sm mb-1">{player.name}</h3>
+                              <p className="text-gray-400 text-xs">{player.team}</p>
+                            </div>
+
+                            {/* Stats */}
+                            <div className="space-y-2 mb-4">
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="text-gray-400">Expected</span>
+                                <span className={`font-bold ${positionColor.text}`}>
+                                  {player.expectedContribution.toFixed(1)}
                                 </span>
                               </div>
-                              <div className="flex-1">
-                                <h5 className="font-semibold">{player.name}</h5>
-                                <p className="text-xs text-muted-foreground">{player.team} • {player.position}</p>
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="text-gray-400">Minutes</span>
+                                <span className="text-white font-medium">{player.predictedMinutes}</span>
+                              </div>
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="text-gray-400">Probability</span>
+                                <span className="text-white font-medium">{(player.statProbability * 100).toFixed(0)}%</span>
+                              </div>
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="text-gray-400">Last 5 Avg</span>
+                                <span className="text-white font-medium">{player.last5Avg.toFixed(1)}</span>
                               </div>
                             </div>
-                            
-                            <div className="space-y-3 mb-4">
-                              <div className="flex justify-between text-sm">
-                                <span>Goals</span>
-                                <span className="font-medium">{player.forecasts.goals.toFixed(2)}</span>
-                              </div>
-                              <div className="flex justify-between text-sm">
-                                <span>Assists</span>
-                                <span className="font-medium">{player.forecasts.assists.toFixed(2)}</span>
-                              </div>
-                              <div className="flex justify-between text-sm">
-                                <span>Rating</span>
-                                <span className="font-medium">{player.forecasts.rating.toFixed(1)}</span>
-                              </div>
-                              <div className="flex justify-between text-sm">
-                                <span>Shots</span>
-                                <span className="font-medium">{player.forecasts.shots.toFixed(1)}</span>
-                              </div>
-                            </div>
-                            
+
+                            {/* Pick Buttons */}
                             <div className="space-y-2">
-                              <div className="text-sm font-medium">Make Your Pick</div>
+                              <div className="text-xs font-medium text-gray-400 text-center">Make Your Pick</div>
                               <div className="grid grid-cols-2 gap-2">
-                                <button className="bg-green-100 hover:bg-green-200 text-green-800 px-3 py-2 rounded-lg text-xs font-semibold transition-colors">
-                                  Over 0.5 Goals
+                                <button className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 text-white px-3 py-2 rounded-lg text-xs font-semibold transition-all shadow-lg">
+                                  Over {player.statType}
                                 </button>
-                                <button className="bg-red-100 hover:bg-red-200 text-red-800 px-3 py-2 rounded-lg text-xs font-semibold transition-colors">
-                                  Under 0.5 Goals
+                                <button className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white px-3 py-2 rounded-lg text-xs font-semibold transition-all shadow-lg">
+                                  Under {player.statType}
                                 </button>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                   </div>
+                )}
+
+                {/* Grid View Toggle */}
+                <div className="flex justify-center mt-6">
+                  <button
+                    onClick={() => setViewMode(viewMode === 'carousel' ? 'grid' : 'carousel')}
+                    className="px-4 py-2 bg-muted text-muted-foreground rounded-lg text-sm font-medium hover:bg-border transition-colors"
+                  >
+                    Switch to {viewMode === 'carousel' ? 'Grid' : 'Carousel'} View
+                  </button>
                 </div>
-
-                {/* Carousel Navigation */}
-                <button
-                  className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-white shadow-lg rounded-full p-2 z-10 border border-border hover:bg-gray-50 transition-colors"
-                  onClick={scrollPrev}
-                  disabled={!canScrollPrev}
-                >
-                  <ChevronLeft className="w-5 h-5" />
-                </button>
-                <button
-                  className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-white shadow-lg rounded-full p-2 z-10 border border-border hover:bg-gray-50 transition-colors"
-                  onClick={scrollNext}
-                  disabled={!canScrollNext}
-                >
-                  <ChevronRight className="w-5 h-5" />
-                </button>
-              </div>
-            ) : (
-              /* Grid Container */
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {mockPlayerForecasts
-                  .filter(player => 
-                    selectedTeam === "home" 
-                      ? player.team === match.homeTeam 
-                      : player.team === match.awayTeam
-                  )
-                  .map((player) => (
-                    <div 
-                      key={player.id} 
-                      className={`border rounded-xl p-4 ${
-                        player.team === match.homeTeam 
-                          ? 'bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200' 
-                          : 'bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                          player.team === match.homeTeam 
-                            ? 'bg-blue-200' 
-                            : 'bg-purple-200'
-                        }`}>
-                          <span className={`text-lg font-bold ${
-                            player.team === match.homeTeam 
-                              ? 'text-blue-800' 
-                              : 'text-purple-800'
-                          }`}>
-                            {player.name.split(' ').map((n: string) => n[0]).join('')}
-                          </span>
-                        </div>
-                        <div className="flex-1">
-                          <h5 className="font-semibold">{player.name}</h5>
-                          <p className="text-xs text-muted-foreground">{player.team} • {player.position}</p>
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-3 mb-4">
-                        <div className="flex justify-between text-sm">
-                          <span>Goals</span>
-                          <span className="font-medium">{player.forecasts.goals.toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span>Assists</span>
-                          <span className="font-medium">{player.forecasts.assists.toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span>Rating</span>
-                          <span className="font-medium">{player.forecasts.rating.toFixed(1)}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span>Shots</span>
-                          <span className="font-medium">{player.forecasts.shots.toFixed(1)}</span>
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <div className="text-sm font-medium">Make Your Pick</div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <button className="bg-green-100 hover:bg-green-200 text-green-800 px-3 py-2 rounded-lg text-xs font-semibold transition-colors">
-                            Over 0.5 Goals
-                          </button>
-                          <button className="bg-red-100 hover:bg-red-200 text-red-800 px-3 py-2 rounded-lg text-xs font-semibold transition-colors">
-                            Under 0.5 Goals
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-              </div>
+              </>
             )}
-
-            {/* Grid View Toggle */}
-            <div className="flex justify-center mt-6">
-              <button
-                onClick={() => setViewMode(viewMode === 'carousel' ? 'grid' : 'carousel')}
-                className="px-4 py-2 bg-muted text-muted-foreground rounded-lg text-sm font-medium hover:bg-border transition-colors"
-              >
-                Switch to {viewMode === 'carousel' ? 'Grid' : 'Carousel'} View
-              </button>
-            </div>
           </div>
         )}
       </div>
