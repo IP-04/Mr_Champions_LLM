@@ -52,16 +52,6 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // Sync real Champions League data first
-  const { dataSyncService } = await import("./services/dataSync");
-  await dataSyncService.runInitialSync();
-  
-  // Start scheduled data synchronization
-  dataSyncService.startScheduledSync();
-  
-  // Only seed mock data if no real data exists (fallback)
-  await storage.seedMockData();
-  
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -90,7 +80,21 @@ app.use((req, res, next) => {
     port,
     host: "0.0.0.0",
     reusePort: true,
-  }, () => {
+  }, async () => {
     log(`serving on port ${port}`);
+    
+    // Run data sync in background after server is up
+    const { dataSyncService } = await import("./services/dataSync");
+    
+    // Only seed mock data if no real data exists (fallback)
+    await storage.seedMockData();
+    
+    // Run initial sync in background (don't block server startup)
+    dataSyncService.runInitialSync().catch((err) => {
+      console.error("Initial data sync failed:", err);
+    });
+    
+    // Start scheduled data synchronization
+    dataSyncService.startScheduledSync();
   });
 })();
