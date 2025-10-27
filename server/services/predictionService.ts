@@ -1,3 +1,6 @@
+import { mlBridge } from '../ml/pythonBridge';
+import { featureEngineering } from '../ml/featureEngineering';
+
 interface TeamStats {
   teamId: number;
   teamName: string;
@@ -16,6 +19,7 @@ interface MatchPrediction {
 }
 
 export class PredictionService {
+  private useMLPredictions: boolean = true; // Toggle for ML vs fallback
   // Simplified team strength ratings (based on UEFA coefficients and recent performance)
   private teamStrengthRatings: Record<string, number> = {
     "Manchester City": 95,
@@ -50,7 +54,71 @@ export class PredictionService {
     return 80; // Default strength for unknown teams
   }
 
-  calculateMatchPrediction(
+  async calculateMatchPrediction(
+    homeTeam: string,
+    awayTeam: string,
+    venue?: string,
+    stage?: string
+  ): Promise<MatchPrediction> {
+    // Try ML prediction first if enabled
+    if (this.useMLPredictions) {
+      try {
+        const mlPrediction = await this.getMLPrediction(homeTeam, awayTeam, venue, stage);
+        if (mlPrediction) {
+          console.log(`✅ Using ML prediction for ${homeTeam} vs ${awayTeam}`);
+          return mlPrediction;
+        }
+      } catch (error) {
+        console.warn('ML prediction failed, falling back to statistical model:', error);
+      }
+    }
+
+    // Fallback to statistical model
+    return this.getFallbackPrediction(homeTeam, awayTeam, venue, stage);
+  }
+
+  /**
+   * Get prediction from Python ML server
+   */
+  private async getMLPrediction(
+    homeTeam: string,
+    awayTeam: string,
+    venue?: string,
+    stage?: string
+  ): Promise<MatchPrediction | null> {
+    // Prepare features
+    const features = featureEngineering.prepareMatchFeatures(
+      homeTeam,
+      awayTeam,
+      stage || '',
+      venue || ''
+    );
+
+    // Call ML bridge
+    const mlResult = await mlBridge.predictMatch({
+      homeTeam,
+      awayTeam,
+      features,
+    });
+
+    if (!mlResult) {
+      return null;
+    }
+
+    return {
+      homeWinProb: Math.round(mlResult.home_win_prob * 10) / 10,
+      drawProb: Math.round(mlResult.draw_prob * 10) / 10,
+      awayWinProb: Math.round(mlResult.away_win_prob * 10) / 10,
+      homeXg: Math.round(mlResult.home_xg * 10) / 10,
+      awayXg: Math.round(mlResult.away_xg * 10) / 10,
+      confidence: Math.round(mlResult.confidence * 10) / 10,
+    };
+  }
+
+  /**
+   * Fallback prediction using statistical model
+   */
+  private getFallbackPrediction(
     homeTeam: string,
     awayTeam: string,
     venue?: string,

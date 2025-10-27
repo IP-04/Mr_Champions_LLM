@@ -244,7 +244,7 @@ export class DataSyncService {
         console.log(`📅 Storing date: ${dateStr}, time: ${timeStr}`);
 
         // Generate predictions
-        const prediction = predictionService.calculateMatchPrediction(
+        const prediction = await predictionService.calculateMatchPrediction(
           apiMatch.homeTeam.name,
           apiMatch.awayTeam.name,
           apiMatch.venue || undefined,
@@ -379,7 +379,7 @@ export class DataSyncService {
       if (existingMatch.length > 0) continue;
 
       // Generate realistic predictions
-      const prediction = predictionService.calculateMatchPrediction(
+      const prediction = await predictionService.calculateMatchPrediction(
         homeTeam.name,
         awayTeam.name,
         matchup.venue,
