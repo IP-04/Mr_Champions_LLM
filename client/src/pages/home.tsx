@@ -42,7 +42,8 @@ export default function Home() {
           matchDateTime = new Date(`${todayStr}T${timeStr}:00.000Z`);
         } else if (match.date.includes('-')) {
           // Handle ISO format (YYYY-MM-DD)
-          const dateTimeString = `${match.date}T${match.time}:00.000Z`;
+          const timeStr = match.time.replace(' CET', '').replace(' PM', '').replace(' AM', '');
+          const dateTimeString = `${match.date}T${timeStr}:00.000Z`;
           matchDateTime = new Date(dateTimeString);
         } else {
           // Handle old format (Oct 21)
@@ -78,7 +79,8 @@ export default function Home() {
           const timeStr = a.time.replace(' CET', '').replace(' PM', '').replace(' AM', '');
           dateA = new Date(`${todayStr}T${timeStr}:00.000Z`);
         } else if (a.date.includes('-')) {
-          dateA = new Date(`${a.date}T${a.time}:00.000Z`);
+          const timeStr = a.time.replace(' CET', '').replace(' PM', '').replace(' AM', '');
+          dateA = new Date(`${a.date}T${timeStr}:00.000Z`);
         } else {
           const currentYear = new Date().getFullYear();
           const timeStr = a.time.replace(' CET', '');
@@ -90,7 +92,8 @@ export default function Home() {
           const timeStr = b.time.replace(' CET', '').replace(' PM', '').replace(' AM', '');
           dateB = new Date(`${todayStr}T${timeStr}:00.000Z`);
         } else if (b.date.includes('-')) {
-          dateB = new Date(`${b.date}T${b.time}:00.000Z`);
+          const timeStr = b.time.replace(' CET', '').replace(' PM', '').replace(' AM', '');
+          dateB = new Date(`${b.date}T${timeStr}:00.000Z`);
         } else {
           const currentYear = new Date().getFullYear();
           const timeStr = b.time.replace(' CET', '');
