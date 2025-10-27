@@ -87,4 +87,28 @@ The schema uses varchar primary keys (UUIDs or custom IDs), real/float types for
 - **StatsBomb Open Data**: Event data for pre-training xG models (planned)
 - **API-Football** (optional paid upgrade): Richer live events and player statistics (planned)
 
-The application now integrates real match and player data from football-data.org API, with predictions calculated by an MVP statistical model using team strength ratings and expected goals algorithms.
+### Machine Learning Infrastructure (Phase 1 Complete)
+
+**Python ML Server (FastAPI)**: Production-grade ML prediction service running on port 8000, serving XGBoost ensemble models for match outcome predictions and expected goals forecasting. The server provides REST endpoints for predictions, SHAP-based explainability, and feature importance analysis.
+
+**ML Model Architecture**:
+- **XGBoost Classifier**: 3-class classification for match outcomes (home win/draw/away win) with probability distributions
+- **XGBoost Regressors**: Dual models for home and away team expected goals (xG) predictions
+- **SHAP Explainability**: TreeExplainer integration providing feature contribution analysis and natural language explanations
+- **Feature Engineering**: 18-dimensional feature space including ELO ratings, form metrics, H2H statistics, possession averages, and contextual factors
+
+**Node.js to Python Bridge** (`server/ml/pythonBridge.ts`): HTTP client using axios to communicate with FastAPI server, providing TypeScript-safe interfaces for ML predictions with graceful fallback to statistical models when ML server is unavailable.
+
+**Hybrid Prediction Strategy**: The prediction service (`server/services/predictionService.ts`) attempts ML predictions first via the Python bridge, falling back to the statistical logistic regression model if the ML server is down, ensuring zero-downtime prediction capabilities.
+
+**Feature Engineering Service** (`server/ml/featureEngineering.ts`): Calculates comprehensive match features including:
+- Team strength metrics (ELO ratings: 1300-2000 range)
+- Recent form analysis (last 5 matches: points, goals, xG)
+- Head-to-head statistics (wins, draws, historical performance)
+- Match context (possession averages, venue advantage, stage importance, rest days)
+
+**Model Training Pipeline**: Initial models trained on synthetic data (`ml/python/train.py`) with plans to integrate historical UCL data from football-data.org API. Training supports both match outcome and xG models with comprehensive metrics reporting (accuracy, precision, recall, F1, RMSE, MAE, R²).
+
+**Deployment Status**: ML infrastructure is fully implemented and ready for integration. Models can be trained and served locally. Next phase includes Redis caching, Docker containerization, and automated retraining pipelines.
+
+The application now combines real match data from football-data.org API with ML-powered predictions using XGBoost models, providing both statistical forecasts and explainable AI insights through SHAP values.

@@ -25,27 +25,28 @@ def generate_synthetic_training_data(n_samples: int = 1000):
     """
     np.random.seed(42)
     
-    # Generate feature matrix
-    X = np.random.randn(n_samples, 17)
+    # Generate feature matrix (18 features total)
+    X = np.random.randn(n_samples, 18)
     
-    # Normalize some features to realistic ranges
-    X[:, 0] = 1500 + X[:, 0] * 200  # home_elo (1300-1700)
-    X[:, 1] = 1500 + X[:, 1] * 200  # away_elo
-    X[:, 2] = X[:, 0] - X[:, 1]     # elo_diff
-    X[:, 3] = np.clip(X[:, 3] * 0.5 + 1.5, 0, 3)  # home_form_last5 (0-3 points)
-    X[:, 4] = np.clip(X[:, 4] * 0.5 + 1.5, 0, 3)  # away_form_last5
-    X[:, 5] = np.clip(X[:, 5] * 2 + 6, 0, 15)     # home_goals_last5 (0-15)
-    X[:, 6] = np.clip(X[:, 6] * 2 + 6, 0, 15)     # away_goals_last5
-    X[:, 7] = np.clip(X[:, 7] * 2 + 6, 0, 12)     # home_xg_last5
-    X[:, 8] = np.clip(X[:, 8] * 2 + 6, 0, 12)     # away_xg_last5
-    X[:, 9] = np.clip(X[:, 9] + 2, 0, 5)          # h2h_home_wins (0-5)
-    X[:, 10] = np.clip(X[:, 10] + 1, 0, 3)        # h2h_draws
-    X[:, 11] = np.clip(X[:, 11] + 1, 0, 5)        # h2h_away_wins
-    X[:, 12] = np.clip(X[:, 12] * 10 + 55, 30, 75)  # home_possession_avg (30-75%)
-    X[:, 13] = np.clip(X[:, 13] * 10 + 45, 25, 70)  # away_possession_avg
-    X[:, 14] = 1  # venue_advantage (binary)
-    X[:, 15] = np.clip(X[:, 15] + 5, 1, 10)       # stage_importance (1-10)
-    X[:, 16] = np.clip(X[:, 16] + 3, 0, 7)        # home_rest_days (0-7)
+    # Normalize all 18 features to realistic ranges
+    X[:, 0] = 1500 + X[:, 0] * 200                      # home_elo (1300-1700)
+    X[:, 1] = 1500 + X[:, 1] * 200                      # away_elo
+    X[:, 2] = X[:, 0] - X[:, 1]                         # elo_diff
+    X[:, 3] = np.clip(X[:, 3] * 0.5 + 1.5, 0, 3)        # home_form_last5 (0-3 points)
+    X[:, 4] = np.clip(X[:, 4] * 0.5 + 1.5, 0, 3)        # away_form_last5
+    X[:, 5] = np.clip(X[:, 5] * 2 + 6, 0, 15)           # home_goals_last5 (0-15)
+    X[:, 6] = np.clip(X[:, 6] * 2 + 6, 0, 15)           # away_goals_last5
+    X[:, 7] = np.clip(X[:, 7] * 2 + 6, 0, 12)           # home_xg_last5
+    X[:, 8] = np.clip(X[:, 8] * 2 + 6, 0, 12)           # away_xg_last5
+    X[:, 9] = np.clip(X[:, 9] + 2, 0, 5)                # h2h_home_wins (0-5)
+    X[:, 10] = np.clip(X[:, 10] + 1, 0, 3)              # h2h_draws
+    X[:, 11] = np.clip(X[:, 11] + 1, 0, 5)              # h2h_away_wins
+    X[:, 12] = np.clip(X[:, 12] * 10 + 55, 30, 75)      # home_possession_avg (30-75%)
+    X[:, 13] = np.clip(X[:, 13] * 10 + 45, 25, 70)      # away_possession_avg
+    X[:, 14] = 1                                         # venue_advantage (binary)
+    X[:, 15] = np.clip(X[:, 15] + 5, 1, 10)             # stage_importance (1-10)
+    X[:, 16] = np.clip(X[:, 16] + 3, 0, 7)              # home_rest_days (0-7)
+    X[:, 17] = np.clip(X[:, 17] + 3, 0, 7)              # away_rest_days (0-7)
     
     # Generate labels based on features (simulate realistic outcomes)
     elo_diff = X[:, 2]
@@ -126,7 +127,7 @@ def train_match_outcome_model(
         'h2h_home_wins': 2, 'h2h_draws': 1, 'h2h_away_wins': 0,
         'home_possession_avg': 58, 'away_possession_avg': 52,
         'venue_advantage': 1, 'stage_importance': 8,
-        'home_rest_days': 4, 'away_rest_days': 3
+        'home_rest_days': 4, 'away_rest_days': 3  # 18th feature
     }
     
     result = predictor.predict_proba(test_match)
@@ -164,8 +165,8 @@ def train_xg_models(
     print(f"\nGenerating {n_samples} training samples...")
     X, _, y_xg_home, y_xg_away = generate_synthetic_training_data(n_samples)
     
-    # Prepare xG-specific features (simplified for this example)
-    X_xg = X[:, :10]  # Use first 10 features
+    # Prepare xG-specific features (use subset for expected goals)
+    X_xg = X[:, :12]  # Use first 12 features (elo, form, goals)
     
     # Train home xG model
     print("\nTraining Home xG model...")
