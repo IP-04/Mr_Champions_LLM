@@ -298,7 +298,9 @@ export class DataSyncService {
         await db.insert(matches).values(match);
         console.log(`✅ Inserted match: ${match.homeTeam} vs ${match.awayTeam}`);
 
-        // Generate and store feature importance
+        // Generate and store feature importance (delete existing first to avoid duplicates)
+        await db.delete(featureImportance).where(eq(featureImportance.matchId, matchId));
+        
         const features = predictionService.calculateFeatureImportance(
           predictionService.getTeamStrength(apiMatch.homeTeam.name),
           predictionService.getTeamStrength(apiMatch.awayTeam.name),
@@ -406,7 +408,9 @@ export class DataSyncService {
 
       await db.insert(matches).values(match);
 
-      // Generate feature importance
+      // Generate feature importance (delete existing first to avoid duplicates)
+      await db.delete(featureImportance).where(eq(featureImportance.matchId, matchId));
+      
       const features = predictionService.calculateFeatureImportance(
         predictionService.getTeamStrength(homeTeam.name),
         predictionService.getTeamStrength(awayTeam.name),
