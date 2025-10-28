@@ -54,6 +54,25 @@ export const players = pgTable("players", {
   statType: text("stat_type").notNull(),
   last5Avg: real("last5_avg").notNull(),
   stat90: real("stat_90").notNull(),
+  // FIFA Stats from SoFIFA
+  radarStats: jsonb("radar_stats").$type<{
+    pace: number;
+    shooting: number;
+    passing: number;
+    dribbling: number;
+    defending: number;
+    physical: number;
+  }>(),
+  sofifaId: text("sofifa_id"),
+  playerFaceUrl: text("player_face_url"),
+  sofifaUrl: text("sofifa_url"),
+  overall: integer("overall"),
+  potential: integer("potential"),
+  preferredFoot: text("preferred_foot"),
+  weakFoot: text("weak_foot"),
+  skillMoves: text("skill_moves"),
+  workRate: text("work_rate"),
+  lastScraped: timestamp("last_scraped"),
 });
 
 export const featureImportance = pgTable("feature_importance", {

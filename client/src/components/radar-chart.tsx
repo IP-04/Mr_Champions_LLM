@@ -20,6 +20,19 @@ export function RadarChart({ player }: RadarChartProps) {
       ];
     }
 
+    // Use real FIFA stats from radarStats if available
+    if (player.radarStats) {
+      return [
+        { subject: 'Pace', value: player.radarStats.pace },
+        { subject: 'Shooting', value: player.radarStats.shooting },
+        { subject: 'Passing', value: player.radarStats.passing },
+        { subject: 'Dribbling', value: player.radarStats.dribbling },
+        { subject: 'Defending', value: player.radarStats.defending },
+        { subject: 'Physical', value: player.radarStats.physical },
+      ];
+    }
+
+    // Fallback to estimated stats based on position and overall
     const baseValue = player.expectedContribution * 8; // Scale to 0-100
     const variance = 15; // Add some variance for realism
     

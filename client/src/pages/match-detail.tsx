@@ -5,7 +5,9 @@ import { Header } from "@/components/header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useEffect } from "react";
 import useEmblaCarousel from 'embla-carousel-react';
-import { ChevronLeft, ChevronRight, User } from "lucide-react";
+import { ChevronLeft, ChevronRight, User, X } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { RadarChart } from "@/components/radar-chart";
 
 export default function MatchDetail() {
   const [, params] = useRoute("/match/:id");
@@ -13,6 +15,7 @@ export default function MatchDetail() {
   const [activeTab, setActiveTab] = useState<"outcome" | "stats" | "players">("outcome");
   const [selectedTeam, setSelectedTeam] = useState<"home" | "away">("home");
   const [viewMode, setViewMode] = useState<"grid" | "carousel">("carousel");
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   
   // Carousel setup
   const [emblaRef, emblaApi] = useEmblaCarousel({ 
@@ -675,7 +678,10 @@ export default function MatchDetail() {
                                 key={player.id} 
                                 className="flex-none w-full sm:w-1/2 lg:w-1/3 xl:w-1/4 px-2"
                               >
-                                <div className="relative bg-gradient-to-t from-gray-900 via-gray-800 to-gray-700 rounded-2xl shadow-xl p-4 overflow-hidden border border-gray-700 hover:border-gray-600 transition-all duration-300 h-full">
+                                <div 
+                                  onClick={() => setSelectedPlayer(player)}
+                                  className="relative bg-gradient-to-t from-gray-900 via-gray-800 to-gray-700 rounded-2xl shadow-xl p-4 overflow-hidden border border-gray-700 hover:border-gray-600 transition-all duration-300 h-full cursor-pointer hover:scale-105"
+                                >
                                   {/* FIFA-style card background */}
                                   <div className={`absolute inset-0 bg-gradient-to-br ${positionColor.bg} opacity-10`} />
                                   <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-white/5 to-transparent rounded-full -translate-y-16 translate-x-16" />
@@ -796,8 +802,9 @@ export default function MatchDetail() {
 
                         return (
                           <div 
-                            key={player.id} 
-                            className="relative bg-gradient-to-t from-gray-900 via-gray-800 to-gray-700 rounded-2xl shadow-xl p-4 overflow-hidden border border-gray-700 hover:border-gray-600 transition-all duration-300"
+                            key={player.id}
+                            onClick={() => setSelectedPlayer(player)}
+                            className="relative bg-gradient-to-t from-gray-900 via-gray-800 to-gray-700 rounded-2xl shadow-xl p-4 overflow-hidden border border-gray-700 hover:border-gray-600 transition-all duration-300 cursor-pointer hover:scale-105"
                           >
                             {/* FIFA-style card background */}
                             <div className={`absolute inset-0 bg-gradient-to-br ${positionColor.bg} opacity-10`} />
@@ -896,6 +903,181 @@ export default function MatchDetail() {
           </div>
         )}
       </div>
+
+      {/* Player Stats Modal */}
+      <Dialog open={!!selectedPlayer} onOpenChange={() => setSelectedPlayer(null)}>
+        <DialogContent className="max-w-2xl bg-gradient-to-b from-gray-900 to-gray-800 border-gray-700 text-white">
+          {selectedPlayer && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-2xl font-bold text-center">
+                  Player Performance Analysis
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="space-y-6">
+                {/* Player FIFA Card Header */}
+                <div className="relative bg-gradient-to-t from-gray-900 via-gray-800 to-gray-700 rounded-2xl p-6 border border-gray-600">
+                  {(() => {
+                    const positionColors = {
+                      FWD: { bg: "from-red-600 to-red-800", text: "text-red-400", border: "border-red-500" },
+                      MID: { bg: "from-green-600 to-green-800", text: "text-green-400", border: "border-green-500" },
+                      DEF: { bg: "from-blue-600 to-blue-800", text: "text-blue-400", border: "border-blue-500" },
+                      GK: { bg: "from-yellow-600 to-yellow-800", text: "text-yellow-400", border: "border-yellow-500" },
+                    };
+                    const positionColor = positionColors[selectedPlayer.position as keyof typeof positionColors] || positionColors.MID;
+
+                    return (
+                      <>
+                        {/* Background gradient overlay */}
+                        <div className={`absolute inset-0 bg-gradient-to-br ${positionColor.bg} opacity-10 rounded-2xl`} />
+                        
+                        <div className="relative z-10">
+                          {/* Header with Position and Rating */}
+                          <div className="flex justify-between items-start mb-6">
+                            <div className={`px-3 py-1.5 bg-gradient-to-r ${positionColor.bg} rounded-lg text-white font-bold shadow-lg`}>
+                              {selectedPlayer.position}
+                            </div>
+                            <div className="text-center">
+                              <div className="text-4xl font-bold text-yellow-400">
+                                {selectedPlayer.overall || selectedPlayer.expectedContribution.toFixed(1)}
+                              </div>
+                              <div className="text-xs text-gray-300">Overall Rating</div>
+                            </div>
+                          </div>
+
+                          {/* Player Image and Info */}
+                          <div className="flex items-center gap-6 mb-6">
+                            <div className={`relative w-24 h-24 rounded-full border-3 ${positionColor.border} overflow-hidden shadow-xl`}>
+                              {selectedPlayer.imageUrl ? (
+                                <img
+                                  src={selectedPlayer.imageUrl}
+                                  alt={selectedPlayer.name}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                  }}
+                                />
+                              ) : null}
+                              <div className={`${selectedPlayer.imageUrl ? 'hidden' : ''} w-full h-full bg-gray-600 flex items-center justify-center`}>
+                                <User className="w-12 h-12 text-gray-400" />
+                              </div>
+                            </div>
+                            
+                            <div className="flex-1">
+                              <h2 className="text-2xl font-bold text-white mb-1">
+                                {selectedPlayer.name}
+                              </h2>
+                              <p className="text-lg text-gray-300 mb-2">{selectedPlayer.team}</p>
+                              <div className="flex gap-2">
+                                <span className={`px-2 py-1 bg-black/30 rounded text-xs font-medium ${positionColor.text}`}>
+                                  {selectedPlayer.statType}
+                                </span>
+                                <span className="px-2 py-1 bg-black/30 rounded text-xs font-medium text-white">
+                                  {selectedPlayer.predictedMinutes} min
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Key Stats Grid */}
+                          <div className="grid grid-cols-4 gap-3 mb-6">
+                            <div className="bg-black/30 rounded-lg p-3 text-center">
+                              <div className="text-xs text-gray-400 mb-1">Expected</div>
+                              <div className={`text-lg font-bold ${positionColor.text}`}>
+                                {selectedPlayer.expectedContribution.toFixed(1)}
+                              </div>
+                            </div>
+                            <div className="bg-black/30 rounded-lg p-3 text-center">
+                              <div className="text-xs text-gray-400 mb-1">Per 90</div>
+                              <div className="text-lg font-bold text-white">
+                                {selectedPlayer.stat90}
+                              </div>
+                            </div>
+                            <div className="bg-black/30 rounded-lg p-3 text-center">
+                              <div className="text-xs text-gray-400 mb-1">Probability</div>
+                              <div className="text-lg font-bold text-white">
+                                {(selectedPlayer.statProbability * 100).toFixed(0)}%
+                              </div>
+                            </div>
+                            <div className="bg-black/30 rounded-lg p-3 text-center">
+                              <div className="text-xs text-gray-400 mb-1">Last 5</div>
+                              <div className="text-lg font-bold text-white">
+                                {selectedPlayer.last5Avg.toFixed(1)}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+
+                {/* FIFA-style Skills Radar Chart */}
+                <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl p-6 border border-gray-700">
+                  <h3 className="text-xl font-bold mb-4 text-center text-white">
+                    Player Attributes
+                  </h3>
+                  <div className="bg-black/20 rounded-xl p-4">
+                    <RadarChart player={selectedPlayer} />
+                  </div>
+                  
+                  {/* Attribute Breakdown */}
+                  <div className="mt-6 grid grid-cols-2 gap-4">
+                    {(() => {
+                      const positionColors = {
+                        FWD: { bg: "from-red-600 to-red-800", text: "text-red-400" },
+                        MID: { bg: "from-green-600 to-green-800", text: "text-green-400" },
+                        DEF: { bg: "from-blue-600 to-blue-800", text: "text-blue-400" },
+                        GK: { bg: "from-yellow-600 to-yellow-800", text: "text-yellow-400" },
+                      };
+                      const positionColor = positionColors[selectedPlayer.position as keyof typeof positionColors] || positionColors.MID;
+                      
+                      // Use real radar stats if available, otherwise estimate
+                      const attributes = selectedPlayer.radarStats ? [
+                        { name: 'Pace', value: selectedPlayer.radarStats.pace },
+                        { name: 'Shooting', value: selectedPlayer.radarStats.shooting },
+                        { name: 'Passing', value: selectedPlayer.radarStats.passing },
+                        { name: 'Dribbling', value: selectedPlayer.radarStats.dribbling },
+                        { name: 'Defending', value: selectedPlayer.radarStats.defending },
+                        { name: 'Physical', value: selectedPlayer.radarStats.physical },
+                      ] : (() => {
+                        const baseValue = selectedPlayer.expectedContribution * 8;
+                        return [
+                          { name: 'Pace', value: Math.min(99, Math.max(40, baseValue * (selectedPlayer.position === 'FWD' ? 1.2 : selectedPlayer.position === 'DEF' ? 0.8 : 1.0))) },
+                          { name: 'Shooting', value: Math.min(99, Math.max(40, baseValue * (selectedPlayer.position === 'FWD' ? 1.3 : 0.8))) },
+                          { name: 'Passing', value: Math.min(99, Math.max(40, baseValue * (selectedPlayer.position === 'MID' ? 1.3 : 0.9))) },
+                          { name: 'Dribbling', value: Math.min(99, Math.max(40, baseValue * (selectedPlayer.position === 'FWD' || selectedPlayer.position === 'MID' ? 1.2 : 0.7))) },
+                          { name: 'Defending', value: Math.min(99, Math.max(40, baseValue * (selectedPlayer.position === 'DEF' ? 1.4 : 0.6))) },
+                          { name: 'Physical', value: Math.min(99, Math.max(40, baseValue * 1.0)) },
+                        ];
+                      })();
+
+                      return attributes.map(attr => (
+                        <div key={attr.name} className="space-y-1">
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-gray-300">{attr.name}</span>
+                            <span className={`text-sm font-bold ${positionColor.text}`}>
+                              {Math.round(attr.value)}
+                            </span>
+                          </div>
+                          <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full bg-gradient-to-r ${positionColor.bg} transition-all duration-500`}
+                              style={{ width: `${attr.value}%` }}
+                            />
+                          </div>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

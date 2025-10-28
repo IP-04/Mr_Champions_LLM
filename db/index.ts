@@ -9,5 +9,9 @@ if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL environment variable is not set");
 }
 
-const sql = neon(process.env.DATABASE_URL);
+const sql = neon(process.env.DATABASE_URL, {
+  fetchOptions: {
+    timeout: 30000, // 30 seconds timeout
+  },
+});
 export const db = drizzle(sql, { schema });

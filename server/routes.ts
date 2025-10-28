@@ -4,6 +4,9 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { insertUserPickSchema } from "@shared/schema";
 import { footballDataApi } from "./services/footballDataApi";
+import { dataSyncService } from "./services/dataSync";
+import { playerStatsGenerator } from "./services/playerStatsGenerator";
+import { sofifaApi, UCL_TEAM_SOFIFA_IDS } from "./services/sofifaApi";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Skip auth setup in local development
@@ -123,6 +126,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const userId = req.user.claims.sub;
     await storage.deleteUserPick(req.params.id, userId);
     res.json({ success: true });
+  });
+
+  // Admin routes for player data sync
+  
+  // Generate FIFA-style stats for all players (fallback method)
+  app.post("/api/admin/generate-stats", async (_req, res) => {
+    try {
+      console.log('🔄 Manual player stats generation triggered');
+      playerStatsGenerator.generateStatsForAllPlayers().catch(err => 
+        console.error('Background stats generation error:', err)
+      );
+      res.json({ 
+        message: "Player stats generation started in background",
+        status: "processing" 
+      });
+    } catch (error) {
+      console.error('Error starting player stats generation:', error);
+      res.status(500).json({ error: "Failed to start stats generation" });
+    }
+  });
+
+  // Sync players using SoFIFA Official API (preferred method)
+  app.post("/api/admin/sync-players", async (_req, res) => {
+    try {
+      console.log('🔄 SoFIFA API sync triggered');
+      
+      // Run sync in background
+      (async () => {
+        console.log('\n=== STARTING SOFIFA API SYNC ===');
+        let totalUpdated = 0;
+        
+        for (const [teamName, teamId] of Object.entries(UCL_TEAM_SOFIFA_IDS)) {
+          const updated = await sofifaApi.syncTeamPlayers(teamId, teamName);
+          totalUpdated += updated;
+          
+          // Small delay between teams to respect rate limit
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+        
+        console.log(`\n=== SOFIFA SYNC COMPLETE ===`);
+        console.log(`✅ Total players updated: ${totalUpdated}`);
+      })().catch(err => console.error('Background SoFIFA sync error:', err));
+      
+      res.json({ 
+        message: "SoFIFA API sync started in background",
+        status: "processing",
+        teams: Object.keys(UCL_TEAM_SOFIFA_IDS).length
+      });
+    } catch (error) {
+      console.error('Error starting SoFIFA sync:', error);
+      res.status(500).json({ error: "Failed to start SoFIFA sync" });
+    }
+  });
+
+  app.post("/api/admin/sync-match-players/:matchId", async (req, res) => {
+    try {
+      const matchId = req.params.matchId;
+      console.log(`🔄 Manual sync triggered for match: ${matchId}`);
+      
+      // Run sync in background
+      dataSyncService.syncPlayersForMatch(matchId).catch(err =>
+        console.error('Background match sync error:', err)
+      );
+      
+      res.json({ 
+        message: `Player sync started for match ${matchId}`,
+        status: "processing" 
+      });
+    } catch (error) {
+      console.error('Error starting match player sync:', error);
+      res.status(500).json({ message: "Failed to start match player sync" });
+    }
   });
 
   const httpServer = createServer(app);

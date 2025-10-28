@@ -89,10 +89,15 @@ app.use((req, res, next) => {
     // Only seed mock data if no real data exists (fallback)
     await storage.seedMockData();
     
-    // Run initial sync in background (don't block server startup)
-    dataSyncService.runInitialSync().catch((err) => {
-      console.error("Initial data sync failed:", err);
-    });
+    // Skip initial sync if env var is set (faster dev startup)
+    if (process.env.SKIP_INITIAL_SYNC !== 'true') {
+      console.log('Running initial data sync...');
+      dataSyncService.runInitialSync().catch((err) => {
+        console.error("Initial data sync failed:", err);
+      });
+    } else {
+      console.log('⚡ Skipping initial sync (SKIP_INITIAL_SYNC=true)');
+    }
     
     // Start scheduled data synchronization
     dataSyncService.startScheduledSync();

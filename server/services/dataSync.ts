@@ -1,5 +1,6 @@
 import { footballDataApi } from "./footballDataApi";
 import { predictionService } from "./predictionService";
+import { sofifaScraper } from "./sofifaPlaywrightScraper";
 import { db } from "../../db";
 import { matches, players, featureImportance } from "@shared/schema";
 import { eq } from "drizzle-orm";
@@ -29,6 +30,12 @@ export class DataSyncService {
     cron.schedule('0 8 * * 1', async () => {
       console.log('Running weekly match stage update...');
       await this.updateMatchStages();
+    });
+
+    // Schedule player stats sync every Sunday at 3 AM UTC
+    cron.schedule('0 3 * * 0', async () => {
+      console.log('Running weekly player stats sync from SoFIFA...');
+      await this.syncPlayerStats();
     });
 
     this.isScheduled = true;
@@ -803,6 +810,212 @@ export class DataSyncService {
     const randomVariation = (Math.random() - 0.5) * base;
     
     return Math.max(0.1, Math.round((base + randomVariation) * 10) / 10);
+  }
+
+  /**
+   * Sync player images and FIFA stats from SoFIFA using Playwright
+   */
+  async syncPlayerStats(): Promise<void> {
+    try {
+      console.log('🔄 Starting player stats sync from SoFIFA (Playwright)...');
+      
+      // Get all players from database
+      const allPlayers = await db.select().from(players);
+      
+      if (allPlayers.length === 0) {
+        console.log('No players found in database');
+        return;
+      }
+
+      console.log(`Found ${allPlayers.length} players to sync`);
+
+      // For now, sync top 10 players to test (you can increase later)
+      const playersToSync = allPlayers.slice(0, 10);
+      
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const player of playersToSync) {
+        try {
+          console.log(`\n📊 Syncing player: ${player.name} (${player.team})`);
+          
+          // Search for player on SoFIFA
+          const searchUrl = `https://sofifa.com/players?keyword=${encodeURIComponent(player.name)}`;
+          console.log(`Searching: ${searchUrl}`);
+          
+          // Note: This is a simplified version - you'll need to implement player search
+          // For now, we'll skip if no sofifaUrl is stored
+          if (!player.sofifaUrl) {
+            console.log(`⚠️ No SoFIFA URL stored for ${player.name}, skipping...`);
+            continue;
+          }
+          
+          // Scrape player data
+          const playerData = await sofifaScraper.scrapePlayer(player.sofifaUrl);
+          
+          if (!playerData) {
+            console.log(`❌ Failed to scrape ${player.name}`);
+            failCount++;
+            continue;
+          }
+          
+          // Calculate radar stats from detailed stats
+          const radarStats = this.calculateRadarStats(playerData);
+          
+          // Update player in database
+          await db.update(players)
+            .set({
+              playerFaceUrl: playerData.player_face_url,
+              overall: playerData.overall,
+              potential: playerData.potential,
+              radarStats: radarStats,
+              preferredFoot: playerData.preferred_foot,
+              weakFoot: playerData.weak_foot,
+              skillMoves: playerData.skill_moves,
+              workRate: playerData.work_rate,
+              lastScraped: new Date(),
+            })
+            .where(eq(players.id, player.id));
+          
+          console.log(`✅ Successfully synced ${player.name} (Overall: ${playerData.overall})`);
+          successCount++;
+          
+          // Rate limiting: 3-5 seconds between requests
+          await new Promise(resolve => setTimeout(resolve, 3000 + Math.random() * 2000));
+          
+        } catch (error) {
+          console.error(`❌ Error syncing ${player.name}:`, error);
+          failCount++;
+        }
+      }
+      
+      console.log(`\n📈 Sync Summary: ${successCount} succeeded, ${failCount} failed`);
+      console.log('✅ Player stats sync completed');
+      
+      // Close browser
+      await sofifaScraper.close();
+      
+    } catch (error) {
+      console.error('❌ Error syncing player stats:', error);
+      await sofifaScraper.close();
+    }
+  }
+  
+  /**
+   * Calculate radar stats (6 main FIFA attributes) from detailed stats
+   */
+  private calculateRadarStats(playerData: any): any {
+    // Default stats if data is missing
+    const defaultStat = 50;
+    
+    // Pace = average of acceleration + sprint speed
+    const pace = Math.round(
+      ((playerData.movement_acceleration || defaultStat) + 
+       (playerData.movement_sprint_speed || defaultStat)) / 2
+    );
+    
+    // Shooting = average of finishing + shot power
+    const shooting = Math.round(
+      ((playerData.attacking_finishing || defaultStat) + 
+       (playerData.power_shot_power || defaultStat)) / 2
+    );
+    
+    // Passing = average of short passing + long passing
+    const passing = Math.round(
+      ((playerData.attacking_short_passing || defaultStat) + 
+       (playerData.skill_long_passing || defaultStat)) / 2
+    );
+    
+    // Dribbling = average of dribbling + ball control
+    const dribbling = Math.round(
+      ((playerData.skill_dribbling || defaultStat) + 
+       (playerData.skill_ball_control || defaultStat)) / 2
+    );
+    
+    // Defending = average of defensive awareness + standing tackle
+    const defending = Math.round(
+      ((playerData.defending_defensive_awareness || defaultStat) + 
+       (playerData.defending_standing_tackle || defaultStat)) / 2
+    );
+    
+    // Physical = average of strength + stamina
+    const physical = Math.round(
+      ((playerData.power_strength || defaultStat) + 
+       (playerData.power_stamina || defaultStat)) / 2
+    );
+    
+    return {
+      pace,
+      shooting,
+      passing,
+      dribbling,
+      defending,
+      physical
+    };
+  }
+
+  /**
+   * Sync players for a specific match
+   */
+  async syncPlayersForMatch(matchId: string): Promise<void> {
+    try {
+      console.log(`🔄 Syncing players for match: ${matchId}`);
+      
+      // Get match details
+      const [match] = await db.select().from(matches).where(eq(matches.id, matchId));
+      
+      if (!match) {
+        console.log(`Match ${matchId} not found`);
+        return;
+      }
+
+      // Get players for both teams
+      const matchPlayers = await db.select()
+        .from(players)
+        .where(eq(players.team, match.homeTeam));
+      
+      const awayPlayers = await db.select()
+        .from(players)
+        .where(eq(players.team, match.awayTeam));
+
+      const allMatchPlayers = [...matchPlayers, ...awayPlayers];
+
+      console.log(`Found ${allMatchPlayers.length} players for match`);
+
+      // Update each player's stats with Playwright scraper
+      for (const player of allMatchPlayers) {
+        if (player.sofifaUrl) {
+          try {
+            const playerData = await sofifaScraper.scrapePlayer(player.sofifaUrl);
+            
+            if (playerData) {
+              const radarStats = this.calculateRadarStats(playerData);
+              
+              await db.update(players)
+                .set({
+                  playerFaceUrl: playerData.player_face_url,
+                  overall: playerData.overall,
+                  radarStats: radarStats,
+                  lastScraped: new Date(),
+                })
+                .where(eq(players.id, player.id));
+            }
+          } catch (error) {
+            console.error(`Error updating player ${player.name}:`, error);
+          }
+        }
+        
+        // Rate limit: 2-3 seconds between requests
+        await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
+      }
+
+      console.log(`✅ Synced ${allMatchPlayers.length} players for match ${matchId}`);
+      
+      await sofifaScraper.close();
+    } catch (error) {
+      console.error(`❌ Error syncing players for match ${matchId}:`, error);
+      await sofifaScraper.close();
+    }
   }
 }
 

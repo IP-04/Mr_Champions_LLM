@@ -40,4 +40,16 @@ export default defineConfig({
       deny: ["**/.*"],
     },
   },
+  optimizeDeps: {
+    include: [
+      'react',
+      'react-dom',
+      'react-router-dom',
+      '@tanstack/react-query',
+      'recharts',
+      'lucide-react',
+    ],
+    exclude: ['@replit/vite-plugin-cartographer', '@replit/vite-plugin-dev-banner'],
+  },
+  cacheDir: path.resolve(__dirname, 'node_modules/.vite'),
 });
