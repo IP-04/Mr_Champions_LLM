@@ -986,27 +986,27 @@ export default function MatchDetail() {
                           {/* Key Stats Grid */}
                           <div className="grid grid-cols-4 gap-3 mb-6">
                             <div className="bg-black/30 rounded-lg p-3 text-center">
-                              <div className="text-xs text-gray-400 mb-1">Expected</div>
+                              <div className="text-xs text-gray-400 mb-1">Expected {selectedPlayer.statType}</div>
                               <div className={`text-lg font-bold ${positionColor.text}`}>
-                                {selectedPlayer.expectedContribution.toFixed(1)}
+                                {selectedPlayer.expectedContribution.toFixed(2)}
                               </div>
                             </div>
                             <div className="bg-black/30 rounded-lg p-3 text-center">
-                              <div className="text-xs text-gray-400 mb-1">Per 90</div>
+                              <div className="text-xs text-gray-400 mb-1">{selectedPlayer.statType} Per 90</div>
                               <div className="text-lg font-bold text-white">
-                                {selectedPlayer.stat90}
+                                {selectedPlayer.stat90.toFixed(2)}
                               </div>
                             </div>
                             <div className="bg-black/30 rounded-lg p-3 text-center">
-                              <div className="text-xs text-gray-400 mb-1">Probability</div>
+                              <div className="text-xs text-gray-400 mb-1">Hit Probability</div>
                               <div className="text-lg font-bold text-white">
-                                {(selectedPlayer.statProbability * 100).toFixed(0)}%
+                                {(Math.min(1.0, Math.max(0.0, selectedPlayer.statProbability)) * 100).toFixed(1)}%
                               </div>
                             </div>
                             <div className="bg-black/30 rounded-lg p-3 text-center">
-                              <div className="text-xs text-gray-400 mb-1">Last 5</div>
+                              <div className="text-xs text-gray-400 mb-1">Avg Last 5</div>
                               <div className="text-lg font-bold text-white">
-                                {selectedPlayer.last5Avg.toFixed(1)}
+                                {selectedPlayer.last5Avg.toFixed(2)}
                               </div>
                             </div>
                           </div>

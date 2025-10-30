@@ -150,6 +150,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!player) {
       return res.status(404).json({ message: "Player not found" });
     }
+    
+    // Normalize probability to ensure it's 0-1
+    if (player.statProbability > 1) {
+      player.statProbability = player.statProbability / 100;
+    }
+    player.statProbability = Math.min(1.0, Math.max(0.0, player.statProbability));
+    
     res.json(player);
   });
 

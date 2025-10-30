@@ -14,6 +14,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from models.match_predictor import MatchOutcomePredictor, ExpectedGoalsPredictor
+from models.player_predictor import PlayerPerformancePredictor
 from explainability.explainer import MatchExplainer
 
 # Initialize FastAPI app
@@ -44,6 +45,9 @@ xg_model_away = ExpectedGoalsPredictor(
     model_path=os.path.join(MODEL_PATH, 'xg_away_model.pkl')
 )
 explainer = MatchExplainer(outcome_model)
+
+# Load player prediction models
+player_predictor = PlayerPerformancePredictor(model_path=MODEL_PATH)
 
 # Pydantic models for request/response
 class MatchFeatures(BaseModel):
@@ -95,6 +99,42 @@ class FeatureImportance(BaseModel):
     feature: str
     importance: float
 
+class PlayerFeatures(BaseModel):
+    overall_rating: float
+    pace: float
+    shooting: float
+    passing: float
+    dribbling: float
+    defending: float
+    physical: float
+    is_forward: int
+    is_midfielder: int
+    is_defender: int
+    is_goalkeeper: int
+    team_elo: float
+    team_form_points: float
+    team_avg_goals_scored: float
+    team_avg_goals_conceded: float
+    opponent_elo: float
+    opponent_def_rating: float
+    is_home: int
+    elo_differential: float
+    player_goals_last_5: float
+    player_assists_last_5: float
+    player_minutes_last_5: float
+    player_avg_rating_last_5: float
+
+class PlayerPredictionRequest(BaseModel):
+    player_name: str
+    position: str  # FWD, MID, DEF, GK
+    features: PlayerFeatures
+
+class PlayerPredictionResponse(BaseModel):
+    player_name: str
+    position: str
+    predictions: Dict[str, float]  # stat_name -> expected_value
+    confidence: float
+
 class HealthResponse(BaseModel):
     status: str
     models_loaded: Dict[str, bool]
@@ -117,7 +157,8 @@ async def health_check():
         models_loaded={
             "match_outcome": outcome_model.model is not None,
             "xg_home": xg_model_home.model is not None,
-            "xg_away": xg_model_away.model is not None
+            "xg_away": xg_model_away.model is not None,
+            "player_predictor": player_predictor is not None
         },
         version="1.0.0"
     )
@@ -279,6 +320,37 @@ async def get_feature_importance():
         return [FeatureImportance(**item) for item in importance]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting feature importance: {str(e)}")
+
+@app.post("/predict/player", response_model=PlayerPredictionResponse)
+async def predict_player(request: PlayerPredictionRequest):
+    """
+    Predict player performance statistics
+    """
+    try:
+        print(f"\n[ML Server] Received player prediction request:")
+        print(f"  Player: {request.player_name}")
+        print(f"  Position: {request.position}")
+        
+        features_dict = request.features.dict()
+        predictions = player_predictor.predict(request.position, features_dict)
+        
+        print(f"[ML Server] Player predictions: {predictions}")
+        
+        response = PlayerPredictionResponse(
+            player_name=request.player_name,
+            position=request.position,
+            predictions=predictions,
+            confidence=0.75  # Can be calculated from model uncertainty
+        )
+        
+        print(f"[ML Server] ✅ Sending player response: {response}")
+        return response
+    
+    except Exception as e:
+        print(f"[ML Server] ❌ Error during player prediction: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Player prediction error: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
