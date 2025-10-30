@@ -59,6 +59,7 @@ export class PythonMLBridge {
   private client: AxiosInstance;
   private baseURL: string;
   private isAvailable: boolean = false;
+  private checkInProgress: boolean = false;
 
   constructor() {
     // Configure Python ML server URL
@@ -66,29 +67,78 @@ export class PythonMLBridge {
     
     this.client = axios.create({
       baseURL: this.baseURL,
-      timeout: 10000, // 10 second timeout
+      timeout: 30000, // 30 second timeout (increased for slow Python startup)
       headers: {
         'Content-Type': 'application/json',
       },
     });
 
-    // Check availability on initialization
-    this.checkAvailability();
+    // Check availability on initialization with retry
+    this.initializeWithRetry();
+  }
+
+  /**
+   * Initialize with retry logic
+   */
+  private async initializeWithRetry(): Promise<void> {
+    // Try immediate check
+    await this.checkAvailability();
+    
+    // If not available, retry after 2 seconds
+    if (!this.isAvailable) {
+      setTimeout(async () => {
+        await this.checkAvailability();
+        
+        // If still not available after retry, retry once more after 5 seconds
+        if (!this.isAvailable) {
+          setTimeout(async () => {
+            await this.checkAvailability();
+          }, 5000);
+        }
+      }, 2000);
+    }
   }
 
   /**
    * Check if Python ML server is available
    */
   async checkAvailability(): Promise<boolean> {
+    if (this.checkInProgress) {
+      return this.isAvailable;
+    }
+
+    this.checkInProgress = true;
+    
     try {
       const response = await this.client.get<HealthStatus>('/health');
       this.isAvailable = response.data.status === 'healthy';
-      console.log(`✅ Python ML server is ${this.isAvailable ? 'available' : 'unavailable'}`);
+      
+      if (this.isAvailable) {
+        console.log(`✅ Python ML server is available at ${this.baseURL}`);
+        console.log(`   Models loaded: ${JSON.stringify(response.data.models_loaded)}`);
+      }
+      
       return this.isAvailable;
-    } catch (error) {
+    } catch (error: any) {
       this.isAvailable = false;
-      console.log('⚠️  Python ML server not available, will use fallback predictions');
+      console.log(`⚠️  Python ML server not available at ${this.baseURL}`);
+      
+      // Detailed error logging
+      if (error.code) {
+        console.log(`   Error code: ${error.code}`);
+      }
+      if (error.message) {
+        console.log(`   Error message: ${error.message}`);
+      }
+      if (error.response) {
+        console.log(`   HTTP Status: ${error.response.status}`);
+      }
+      
+      console.log(`   Will use fallback predictions. Start ML server with:`);
+      console.log(`   cd ml/python && python quickstart.py --serve-only`);
       return false;
+    } finally {
+      this.checkInProgress = false;
     }
   }
 
@@ -109,15 +159,39 @@ export class PythonMLBridge {
    * Predict match outcome using Python XGBoost model
    */
   async predictMatch(input: MatchPredictionInput): Promise<MatchPredictionOutput | null> {
+    // If server was previously unavailable, try to reconnect
+    if (!this.isAvailable && !this.checkInProgress) {
+      await this.checkAvailability();
+    }
+
+    // If still not available, return null
+    if (!this.isAvailable) {
+      return null;
+    }
+
     try {
+      // Convert camelCase to snake_case for Python API
+      const requestBody = {
+        home_team: input.homeTeam,
+        away_team: input.awayTeam,
+        features: input.features
+      };
+
+      console.log(`[PythonBridge] Sending request to ML server:`, JSON.stringify(requestBody, null, 2));
+
       const response = await this.client.post<MatchPredictionOutput>(
         '/predict/match',
-        input
+        requestBody
       );
+      
+      console.log(`[PythonBridge] ✅ Received response from ML server:`, response.data);
       return response.data;
     } catch (error: any) {
+      // Mark as unavailable if connection fails
+      this.isAvailable = false;
+      
       if (error.code === 'ECONNREFUSED') {
-        console.error('❌ Python ML server not running. Start it with: cd ml/python && uvicorn serve:app --reload');
+        console.error('❌ Python ML server connection refused');
       } else {
         console.error('Failed to get ML prediction:', error.message);
       }
@@ -129,6 +203,16 @@ export class PythonMLBridge {
    * Get match prediction with SHAP explanation
    */
   async explainMatch(input: MatchPredictionInput): Promise<ExplanationOutput | null> {
+    // If server was previously unavailable, try to reconnect
+    if (!this.isAvailable && !this.checkInProgress) {
+      await this.checkAvailability();
+    }
+
+    // If still not available, return null
+    if (!this.isAvailable) {
+      return null;
+    }
+
     try {
       const response = await this.client.post<ExplanationOutput>(
         '/explain/match',
@@ -136,6 +220,8 @@ export class PythonMLBridge {
       );
       return response.data;
     } catch (error: any) {
+      // Mark as unavailable if connection fails
+      this.isAvailable = false;
       console.error('Failed to get ML explanation:', error.message);
       return null;
     }

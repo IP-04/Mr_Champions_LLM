@@ -30,18 +30,29 @@ class MatchOutcomePredictor:
             'h2h_home_wins', 'h2h_draws', 'h2h_away_wins',
             'home_possession_avg', 'away_possession_avg',
             'venue_advantage', 'stage_importance',
-            'home_rest_days', 'away_rest_days'
+            'home_rest_days', 'away_rest_days',
+            # New features to reduce home bias
+            'elo_gap_magnitude',          # abs(elo_diff) - nonlinear strength gap
+            'underdog_factor',            # 1 if away_elo > home_elo else 0
+            'quality_tier_home',          # 1=elite(>1850), 2=strong(1750-1850), 3=mid(<1750)
+            'quality_tier_away',
+            'strength_adjusted_venue'     # venue_advantage * (1 - abs(elo_diff)/200)
         ]
         
         if model_path and os.path.exists(model_path):
             self.load_model(model_path)
         else:
+            # UPDATED: Better params for 616 samples to reduce overfitting
             self.model = xgb.XGBClassifier(
-                n_estimators=200,
-                max_depth=6,
-                learning_rate=0.1,
-                subsample=0.8,
-                colsample_bytree=0.8,
+                n_estimators=80,      # Reduced from 100
+                max_depth=3,          # Reduced from 4 - prevents memorization
+                learning_rate=0.05,   # Reduced from 0.08 - slower, more careful learning
+                subsample=0.7,        # Reduced from 0.8 - more regularization
+                colsample_bytree=0.7, # Reduced from 0.8
+                min_child_weight=5,   # INCREASED from 2 - requires more samples per leaf
+                gamma=0.5,            # INCREASED from 0.3 - harder to make splits
+                reg_alpha=0.1,        # INCREASED L1 regularization
+                reg_lambda=1.0,       # INCREASED L2 regularization
                 objective='multi:softprob',
                 num_class=3,
                 eval_metric='mlogloss',
@@ -121,11 +132,21 @@ class MatchOutcomePredictor:
         
         proba = self.model.predict_proba(X_scaled)[0]
         
+        # Light smoothing to avoid only extreme predictions (90%+)
+        # Mostly trust model predictions with minimal baseline mixing
+        alpha = 0.92  # Weight for model predictions (92% model + 8% baseline)
+        baseline = np.array([0.333, 0.333, 0.334])  # Neutral baseline - no home advantage bias
+        
+        smoothed_proba = alpha * proba + (1 - alpha) * baseline
+        
+        # Normalize to ensure probabilities sum to 100%
+        smoothed_proba = smoothed_proba / smoothed_proba.sum()
+        
         return {
-            'home_win_prob': float(proba[0] * 100),
-            'draw_prob': float(proba[1] * 100),
-            'away_win_prob': float(proba[2] * 100),
-            'confidence': float(max(proba) * 100)
+            'home_win_prob': float(smoothed_proba[0] * 100),
+            'draw_prob': float(smoothed_proba[1] * 100),
+            'away_win_prob': float(smoothed_proba[2] * 100),
+            'confidence': float(max(smoothed_proba) * 100)
         }
     
     def get_feature_importance(self) -> List[Dict]:
@@ -167,25 +188,29 @@ class ExpectedGoalsPredictor:
     def __init__(self, model_path: Optional[str] = None):
         self.model = None
         self.scaler = StandardScaler()
+        # These are the first 12 features from the 18-feature training set
         self.feature_names = [
-            'team_elo', 'opponent_elo',
-            'team_goals_last5', 'team_xg_last5',
-            'opponent_goals_conceded_last5', 'opponent_xga_last5',
-            'team_shots_last5', 'team_shots_on_target_last5',
-            'possession_avg', 'venue_advantage'
+            'home_elo', 'away_elo', 'elo_diff',
+            'home_form_last5', 'away_form_last5',
+            'home_goals_last5', 'away_goals_last5',
+            'home_xg_last5', 'away_xg_last5',
+            'h2h_home_wins', 'h2h_draws', 'h2h_away_wins'
         ]
         
         if model_path and os.path.exists(model_path):
             self.load_model(model_path)
         else:
+            # Reduced complexity for realistic xG predictions
             self.model = xgb.XGBRegressor(
-                n_estimators=150,
-                max_depth=5,
-                learning_rate=0.08,
-                subsample=0.85,
-                colsample_bytree=0.8,
-                reg_lambda=1.5,  # L2 regularization
-                reg_alpha=0.5,   # L1 regularization
+                n_estimators=50,      # Reduced from 150
+                max_depth=3,          # Reduced from 5
+                learning_rate=0.05,   # Reduced from 0.08
+                subsample=0.7,        # Reduced from 0.85
+                colsample_bytree=0.7, # Reduced from 0.8
+                min_child_weight=2,   # Added regularization
+                gamma=0.3,            # Added regularization
+                reg_lambda=2.0,       # Increased L2 regularization
+                reg_alpha=1.0,        # Increased L1 regularization
                 random_state=42
             )
     
@@ -214,14 +239,22 @@ class ExpectedGoalsPredictor:
         }
     
     def predict(self, match_data: Dict) -> float:
-        """Predict expected goals"""
+        """Predict expected goals with realistic bounds"""
         if self.model is None:
             raise ValueError("Model not trained or loaded")
         
         X = self.prepare_features(match_data)
         X_scaled = self.scaler.transform(X)
-        xg = self.model.predict(X_scaled)[0]
-        return float(max(0.3, min(4.0, xg)))  # Clamp to reasonable range
+        xg_raw = self.model.predict(X_scaled)[0]
+        
+        # Apply smoothing toward realistic mean (1.5 goals)
+        # Mix prediction with baseline to avoid extremes
+        baseline_xg = 1.5
+        alpha = 0.7  # 70% model, 30% baseline
+        xg_smoothed = alpha * xg_raw + (1 - alpha) * baseline_xg
+        
+        # Clamp to realistic range for Champions League
+        return float(max(0.5, min(3.5, xg_smoothed)))
     
     def save_model(self, path: str):
         """Save model and scaler"""

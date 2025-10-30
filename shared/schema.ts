@@ -40,6 +40,13 @@ export const matches = pgTable("matches", {
   homeXg: real("home_xg").notNull(),
   awayXg: real("away_xg").notNull(),
   confidence: real("confidence").notNull(),
+  
+  // Actual match results (populated after match finishes)
+  status: varchar("status", { length: 20 }).notNull().default("SCHEDULED"),
+  homeGoals: integer("home_goals"),
+  awayGoals: integer("away_goals"),
+  actualHomeXg: real("actual_home_xg"),
+  actualAwayXg: real("actual_away_xg"),
 });
 
 export const players = pgTable("players", {

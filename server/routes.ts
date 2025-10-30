@@ -7,6 +7,7 @@ import { footballDataApi } from "./services/footballDataApi";
 import { dataSyncService } from "./services/dataSync";
 import { playerStatsGenerator } from "./services/playerStatsGenerator";
 import { sofifaApi, UCL_TEAM_SOFIFA_IDS } from "./services/sofifaApi";
+import { predictionService } from "./services/predictionService";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Skip auth setup in local development
@@ -46,6 +47,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(404).json({ message: "Match not found" });
     }
     res.json(match);
+  });
+
+  // Regenerate prediction for a specific match
+  app.post("/api/matches/:id/regenerate-prediction", async (req, res) => {
+    try {
+      const matchId = req.params.id;
+      console.log(`\n🔄 Regenerating prediction for match: ${matchId}`);
+      
+      const match = await storage.getMatch(matchId);
+      if (!match) {
+        return res.status(404).json({ message: "Match not found" });
+      }
+
+      // Generate new prediction
+      const prediction = await predictionService.calculateMatchPrediction(
+        match.homeTeam,
+        match.awayTeam,
+        match.venue,
+        match.stage
+      );
+
+      // Update match in database
+      const updatedMatch = {
+        ...match,
+        homeWinProb: prediction.homeWinProb,
+        drawProb: prediction.drawProb,
+        awayWinProb: prediction.awayWinProb,
+        homeXg: prediction.homeXg,
+        awayXg: prediction.awayXg,
+      };
+
+      await storage.updateMatch(matchId, updatedMatch);
+
+      console.log(`✅ Prediction regenerated for ${match.homeTeam} vs ${match.awayTeam}`);
+      res.json(updatedMatch);
+    } catch (error) {
+      console.error('Error regenerating prediction:', error);
+      res.status(500).json({ message: "Failed to regenerate prediction" });
+    }
+  });
+
+  // Regenerate all predictions
+  app.post("/api/admin/regenerate-all-predictions", async (_req, res) => {
+    try {
+      console.log('\n🔄 Regenerating ALL match predictions...');
+      
+      const matches = await storage.getMatches();
+      const scheduledMatches = matches.filter(m => m.status === 'SCHEDULED' || !m.status);
+      
+      console.log(`Found ${scheduledMatches.length} scheduled matches to update`);
+      
+      let updated = 0;
+      for (const match of scheduledMatches) {
+        try {
+          const prediction = await predictionService.calculateMatchPrediction(
+            match.homeTeam,
+            match.awayTeam,
+            match.venue,
+            match.stage
+          );
+
+          await storage.updateMatch(match.id, {
+            ...match,
+            homeWinProb: prediction.homeWinProb,
+            drawProb: prediction.drawProb,
+            awayWinProb: prediction.awayWinProb,
+            homeXg: prediction.homeXg,
+            awayXg: prediction.awayXg,
+          });
+
+          updated++;
+          console.log(`✅ [${updated}/${scheduledMatches.length}] ${match.homeTeam} vs ${match.awayTeam}`);
+        } catch (error) {
+          console.error(`❌ Failed to update ${match.id}:`, error);
+        }
+      }
+      
+      console.log(`\n✅ Regenerated ${updated} predictions`);
+      res.json({ 
+        message: `Regenerated ${updated} predictions`,
+        total: scheduledMatches.length,
+        updated 
+      });
+    } catch (error) {
+      console.error('Error regenerating predictions:', error);
+      res.status(500).json({ message: "Failed to regenerate predictions" });
+    }
   });
 
   // Players
@@ -147,36 +235,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Sync players using SoFIFA Official API (preferred method)
-  app.post("/api/admin/sync-players", async (_req, res) => {
+  // Sync players using Playwright web scraper
+  app.post("/api/admin/sync-players", async (req, res) => {
     try {
-      console.log('🔄 SoFIFA API sync triggered');
+      const limit = req.body?.limit || 20; // Default to 20 players
+      console.log(`🔄 Playwright scraper sync triggered (limit: ${limit})`);
       
       // Run sync in background
       (async () => {
-        console.log('\n=== STARTING SOFIFA API SYNC ===');
-        let totalUpdated = 0;
-        
-        for (const [teamName, teamId] of Object.entries(UCL_TEAM_SOFIFA_IDS)) {
-          const updated = await sofifaApi.syncTeamPlayers(teamId, teamName);
-          totalUpdated += updated;
-          
-          // Small delay between teams to respect rate limit
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
-        
-        console.log(`\n=== SOFIFA SYNC COMPLETE ===`);
-        console.log(`✅ Total players updated: ${totalUpdated}`);
-      })().catch(err => console.error('Background SoFIFA sync error:', err));
+        console.log('\n=== STARTING PLAYWRIGHT SCRAPER SYNC ===');
+        await dataSyncService.syncPlayersWithUrls(limit);
+        console.log(`\n=== SYNC COMPLETE ===`);
+      })().catch(err => console.error('Background scraper sync error:', err));
       
       res.json({ 
-        message: "SoFIFA API sync started in background",
+        message: `Playwright scraper sync started in background (limit: ${limit})`,
         status: "processing",
-        teams: Object.keys(UCL_TEAM_SOFIFA_IDS).length
+        note: "Check server logs for progress"
       });
     } catch (error) {
-      console.error('Error starting SoFIFA sync:', error);
-      res.status(500).json({ error: "Failed to start SoFIFA sync" });
+      console.error('Error starting scraper sync:', error);
+      res.status(500).json({ error: "Failed to start scraper sync" });
     }
   });
 

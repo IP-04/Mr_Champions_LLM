@@ -12,7 +12,10 @@
     "db:push": "drizzle-kit push",
     "ml:train": "tsx ml/training/train.ts",
     "ml:serve": "tsx ml/serving/serve.ts",
-    "ml:features": "tsx ml/feature_engineering/extract.ts"
+    "ml:features": "tsx ml/feature_engineering/extract.ts",
+    "export-training-data": "tsx scripts/export-training-data.ts",
+    "import-finished-matches": "tsx scripts/import-finished-matches.ts",
+    "update-match-results": "tsx scripts/update-match-results.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

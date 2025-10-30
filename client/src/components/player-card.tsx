@@ -84,9 +84,9 @@ export function PlayerCard({ player }: PlayerCardProps) {
       {/* Player Image */}
       <div className="flex justify-center mt-8 mb-4">
         <div className={`relative w-20 h-20 rounded-full border-2 ${positionColor.border} overflow-hidden shadow-lg`}>
-          {!imageError && player.imageUrl ? (
+          {!imageError && (player.playerFaceUrl || player.imageUrl) ? (
             <img
-              src={player.imageUrl}
+              src={player.playerFaceUrl || player.imageUrl}
               alt={player.name}
               className="w-full h-full object-cover"
               onError={() => setImageError(true)}

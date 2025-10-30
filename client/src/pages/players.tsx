@@ -19,6 +19,8 @@ export default function Players() {
       const res = await fetch("/api/players");
       return res.json();
     },
+    staleTime: 0, // Always fetch fresh data
+    gcTime: 0, // Don't cache
   });
 
   // Extract unique teams for filter dropdown

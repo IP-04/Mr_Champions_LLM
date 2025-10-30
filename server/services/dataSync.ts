@@ -1,6 +1,7 @@
 import { footballDataApi } from "./footballDataApi";
 import { predictionService } from "./predictionService";
 import { sofifaScraper } from "./sofifaPlaywrightScraper";
+import { matchResultsService } from "./matchResults";
 import { db } from "../../db";
 import { matches, players, featureImportance } from "@shared/schema";
 import { eq } from "drizzle-orm";
@@ -24,6 +25,7 @@ export class DataSyncService {
       console.log('Running scheduled data sync...');
       await this.syncChampionsLeagueMatches();
       await this.syncTeamPlayers();
+      await matchResultsService.updateFinishedMatches(); // Update match results
     });
 
     // Schedule match stage updates every Monday at 8 AM UTC
@@ -750,15 +752,16 @@ export class DataSyncService {
   }
 
   private getPlayerImageUrl(playerName: string, position: string): string {
-    // For now, return empty string to use fallback icon in the frontend
-    // TODO: Integrate with API-Football or similar service for real player photos
-    return "";
-    
-    // Alternative: Generate avatar based on player initials and position
-    // const initials = playerName.split(' ').map(n => n[0]).join('').substring(0, 2);
-    // const positionColors = { FWD: 'red', MID: 'green', DEF: 'blue', GK: 'yellow' };
-    // const color = positionColors[position as keyof typeof positionColors] || 'gray';
-    // return `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=${color}&color=white&size=60`;
+    // Generate UI Avatars based on player initials and position colors
+    const initials = playerName.split(' ').map(n => n[0]).join('').substring(0, 2);
+    const positionColors: Record<string, string> = { 
+      'FWD': 'e53e3e', 
+      'MID': '38a169', 
+      'DEF': '3182ce', 
+      'GK': 'ecc94b' 
+    };
+    const color = positionColors[position] || '718096';
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=${color}&color=fff&size=200&bold=true`;
   }
 
   private calculatePredictedMinutes(position: string, teamStrength: number): number {
@@ -900,12 +903,120 @@ export class DataSyncService {
       await sofifaScraper.close();
     }
   }
+
+  /**
+   * Sync players that already have sofifaUrl in database
+   */
+  async syncPlayersWithUrls(limit: number = 20): Promise<void> {
+    try {
+      console.log(`🔄 Starting sync for players with SoFIFA URLs (limit: ${limit})...\n`);
+      
+      // Initialize browser
+      await sofifaScraper.init();
+      
+      // Get players that have sofifaUrl
+      const allPlayers = await db.select().from(players);
+      const playersWithUrls = allPlayers.filter(p => p.sofifaUrl);
+      
+      console.log(`📊 Found ${playersWithUrls.length} players with SoFIFA URLs`);
+      
+      if (playersWithUrls.length === 0) {
+        console.log('⚠️  No players have SoFIFA URLs. Run the import script first.');
+        await sofifaScraper.close();
+        return;
+      }
+
+      // Limit the number of players to sync
+      const playersToSync = playersWithUrls.slice(0, limit);
+      console.log(`🎯 Syncing ${playersToSync.length} players\n`);
+      
+      let successCount = 0;
+      let failCount = 0;
+
+      for (let i = 0; i < playersToSync.length; i++) {
+        const player = playersToSync[i];
+        
+        try {
+          console.log(`[${i + 1}/${playersToSync.length}] 📊 ${player.name} (${player.team})`);
+          console.log(`  🔗 ${player.sofifaUrl}`);
+          
+          // Scrape player data
+          const playerData = await sofifaScraper.scrapePlayer(player.sofifaUrl!);
+          
+          if (!playerData) {
+            console.log(`  ❌ Failed to scrape data`);
+            failCount++;
+            continue;
+          }
+          
+          // Calculate radar stats from FIFA attributes
+          const radarStats = this.calculateRadarStats(playerData);
+          
+          // Update player in database
+          await db.update(players)
+            .set({
+              playerFaceUrl: playerData.player_face_url,
+              overall: playerData.overall,
+              potential: playerData.potential,
+              radarStats: radarStats,
+              preferredFoot: playerData.preferred_foot,
+              weakFoot: playerData.weak_foot,
+              skillMoves: playerData.skill_moves,
+              workRate: playerData.work_rate,
+              lastScraped: new Date(),
+            })
+            .where(eq(players.id, player.id));
+          
+          console.log(`  ✅ Overall: ${playerData.overall} | Face: ${playerData.player_face_url ? '✓' : '✗'}`);
+          console.log(`  📈 FIFA Stats - PAC:${radarStats.pace} SHO:${radarStats.shooting} PAS:${radarStats.passing} DRI:${radarStats.dribbling} DEF:${radarStats.defending} PHY:${radarStats.physical}\n`);
+          
+          successCount++;
+          
+          // Rate limiting: 3-5 seconds between requests
+          const delay = 3000 + Math.random() * 2000;
+          if (i < playersToSync.length - 1) {
+            console.log(`  ⏳ Waiting ${(delay / 1000).toFixed(1)}s before next player...\n`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+          
+        } catch (error: any) {
+          console.log(`  ❌ Error: ${error.message}\n`);
+          failCount++;
+        }
+      }
+      
+      console.log('\n📈 Sync Summary:');
+      console.log(`  ✅ Succeeded: ${successCount}`);
+      console.log(`  ❌ Failed: ${failCount}`);
+      console.log(`  📊 Total: ${playersToSync.length}`);
+      console.log('\n✅ Sync completed');
+      
+      // Close browser
+      await sofifaScraper.close();
+      
+    } catch (error) {
+      console.error('❌ Error syncing players:', error);
+      await sofifaScraper.close();
+    }
+  }
   
   /**
    * Calculate radar stats (6 main FIFA attributes) from detailed stats
    */
   private calculateRadarStats(playerData: any): any {
-    // Default stats if data is missing
+    // If we have FIFA stats directly from the script, use those
+    if (playerData.fifa_pace && playerData.fifa_shooting) {
+      return {
+        pace: playerData.fifa_pace,
+        shooting: playerData.fifa_shooting,
+        passing: playerData.fifa_passing,
+        dribbling: playerData.fifa_dribbling,
+        defending: playerData.fifa_defending,
+        physical: playerData.fifa_physical
+      };
+    }
+    
+    // Fallback: calculate from detailed stats
     const defaultStat = 50;
     
     // Pace = average of acceleration + sprint speed

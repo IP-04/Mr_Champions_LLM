@@ -19,7 +19,7 @@ interface MatchPrediction {
 }
 
 export class PredictionService {
-  private useMLPredictions: boolean = true; // Toggle for ML vs fallback
+  private useMLPredictions: boolean = true; // RE-ENABLED with 616 real training samples
   // Simplified team strength ratings (based on UEFA coefficients and recent performance)
   private teamStrengthRatings: Record<string, number> = {
     "Manchester City": 95,
@@ -60,17 +60,24 @@ export class PredictionService {
     venue?: string,
     stage?: string
   ): Promise<MatchPrediction> {
+    console.log(`\n[PredictionService] ==========================================`);
+    console.log(`[PredictionService] Calculate prediction for: ${homeTeam} vs ${awayTeam}`);
+    console.log(`[PredictionService] ML enabled: ${this.useMLPredictions}`);
+    
     // Try ML prediction first if enabled
     if (this.useMLPredictions) {
       try {
         const mlPrediction = await this.getMLPrediction(homeTeam, awayTeam, venue, stage);
         if (mlPrediction) {
-          console.log(`✅ Using ML prediction for ${homeTeam} vs ${awayTeam}`);
+          console.log(`[PredictionService] ✅ Using ML prediction for ${homeTeam} vs ${awayTeam}`);
+          console.log(`[PredictionService] ==========================================\n`);
           return mlPrediction;
         }
       } catch (error) {
-        console.warn('ML prediction failed, falling back to statistical model:', error);
+        console.warn('[PredictionService] ❌ ML prediction failed, falling back to statistical model:', error);
       }
+    } else {
+      console.log(`[PredictionService] ML predictions disabled, using fallback`);
     }
 
     // Fallback to statistical model
@@ -86,13 +93,17 @@ export class PredictionService {
     venue?: string,
     stage?: string
   ): Promise<MatchPrediction | null> {
-    // Prepare features
-    const features = featureEngineering.prepareMatchFeatures(
+    console.log(`\n[PredictionService] Getting ML prediction for ${homeTeam} vs ${awayTeam}`);
+    
+    // Prepare features (now async - queries real database data)
+    const features = await featureEngineering.prepareMatchFeatures(
       homeTeam,
       awayTeam,
       stage || '',
       venue || ''
     );
+
+    console.log(`[PredictionService] Calling ML server with features`);
 
     // Call ML bridge
     const mlResult = await mlBridge.predictMatch({
@@ -102,10 +113,13 @@ export class PredictionService {
     });
 
     if (!mlResult) {
+      console.log(`[PredictionService] ❌ ML server returned null`);
       return null;
     }
 
-    return {
+    console.log(`[PredictionService] ✅ ML prediction received:`, mlResult);
+
+    const prediction = {
       homeWinProb: Math.round(mlResult.home_win_prob * 10) / 10,
       drawProb: Math.round(mlResult.draw_prob * 10) / 10,
       awayWinProb: Math.round(mlResult.away_win_prob * 10) / 10,
@@ -113,6 +127,53 @@ export class PredictionService {
       awayXg: Math.round(mlResult.away_xg * 10) / 10,
       confidence: Math.round(mlResult.confidence * 10) / 10,
     };
+
+    console.log(`[PredictionService] Final prediction:`, prediction);
+    return prediction;
+  }
+
+  /**
+   * Calculate context-aware home advantage based on team quality gap
+   * Smaller clubs get larger home advantage, top clubs already dominate
+   */
+  private calculateHomeAdvantage(
+    homeTeam: string,
+    awayTeam: string,
+    homeStrength: number,
+    awayStrength: number,
+    venue?: string
+  ): number {
+    const strengthGap = Math.abs(homeStrength - awayStrength);
+    
+    // Base home advantage varies by team quality gap
+    let baseAdvantage: number;
+    
+    if (strengthGap > 15) {
+      // Big mismatch: reduce home advantage for the favorite
+      baseAdvantage = homeStrength > awayStrength ? 2.0 : 3.5;
+    } else if (strengthGap > 8) {
+      // Moderate gap
+      baseAdvantage = 2.5;
+    } else {
+      // Close match: standard advantage
+      baseAdvantage = 3.0;
+    }
+    
+    // Venue-specific modifiers for famous intimidating stadiums
+    const venueModifiers: Record<string, number> = {
+      "Anfield": 1.4,
+      "Signal Iduna Park": 1.3,
+      "Santiago Bernabéu": 1.2,
+      "Camp Nou": 1.2,
+      "Allianz Arena": 1.2,
+      "San Siro": 1.1,
+      "Etihad Stadium": 0.9,
+      "Parc des Princes": 1.0,
+    };
+    
+    const venueMultiplier = venue && venueModifiers[venue] ? venueModifiers[venue] : 1.0;
+    
+    return baseAdvantage * venueMultiplier;
   }
 
   /**
@@ -127,20 +188,23 @@ export class PredictionService {
     const homeStrength = this.getTeamStrength(homeTeam);
     const awayStrength = this.getTeamStrength(awayTeam);
     
-    // Home advantage factor (typically 3-5 rating points)
-    const homeAdvantage = 4;
+    // Dynamic home advantage based on team quality gap
+    const homeAdvantage = this.calculateHomeAdvantage(
+      homeTeam, awayTeam, homeStrength, awayStrength, venue
+    );
     const adjustedHomeStrength = homeStrength + homeAdvantage;
     
     // Calculate strength difference
     const strengthDiff = adjustedHomeStrength - awayStrength;
     
-    // Base probabilities using logistic function
-    // When teams are equal (diff=0), home has ~45%, draw ~27%, away ~28%
-    const baseProbHome = this.logistic(strengthDiff / 15) * 0.85;
-    const baseProbAway = this.logistic(-strengthDiff / 15) * 0.85;
+    // More aggressive scaling - divide by 10 instead of 15 to make strength matter more
+    // Remove 0.85 cap to let strong teams have realistic win probabilities
+    const scalingFactor = 10;
+    const baseProbHome = this.logistic(strengthDiff / scalingFactor);
+    const baseProbAway = this.logistic(-strengthDiff / scalingFactor);
     
-    // Draw probability inversely related to strength difference
-    const drawProb = Math.max(0.15, 0.32 - Math.abs(strengthDiff) / 100);
+    // Draw probability decreases with larger strength gaps
+    const drawProb = Math.max(0.10, 0.30 - Math.abs(strengthDiff) / 80);
     
     // Normalize to sum to 100%
     const total = baseProbHome + baseProbAway + drawProb;

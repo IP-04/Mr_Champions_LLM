@@ -65,6 +65,12 @@ class MatchFeatures(BaseModel):
     stage_importance: float = Field(..., description="Tournament stage importance")
     home_rest_days: int = Field(..., description="Home team rest days")
     away_rest_days: int = Field(..., description="Away team rest days")
+    # New anti-bias features
+    elo_gap_magnitude: float = Field(..., description="Absolute ELO difference")
+    underdog_factor: int = Field(..., description="1 if away team is stronger, else 0")
+    quality_tier_home: int = Field(..., description="Home team quality tier (1=elite, 2=strong, 3=mid)")
+    quality_tier_away: int = Field(..., description="Away team quality tier (1=elite, 2=strong, 3=mid)")
+    strength_adjusted_venue: float = Field(..., description="Venue advantage adjusted by strength gap")
 
 class MatchPredictionRequest(BaseModel):
     home_team: str = Field(..., description="Home team name")
@@ -122,41 +128,55 @@ async def predict_match(request: MatchPredictionRequest):
     Predict match outcome probabilities and expected goals
     """
     try:
+        print(f"\n[ML Server] Received prediction request:")
+        print(f"  Home: {request.home_team}")
+        print(f"  Away: {request.away_team}")
+        print(f"  Features: {request.features.dict()}")
+        
         # Get match outcome probabilities
         features_dict = request.features.dict()
         outcome_probs = outcome_model.predict_proba(features_dict)
         
+        print(f"[ML Server] Outcome probabilities: {outcome_probs}")
+        
         # Predict expected goals for home and away
+        # xG models use first 12 features: elo ratings, form, goals, xG, and H2H stats
         home_xg_features = {
-            'team_elo': features_dict['home_elo'],
-            'opponent_elo': features_dict['away_elo'],
-            'team_goals_last5': features_dict['home_goals_last5'],
-            'team_xg_last5': features_dict['home_xg_last5'],
-            'opponent_goals_conceded_last5': features_dict['away_goals_last5'],
-            'opponent_xga_last5': features_dict['away_xg_last5'],
-            'team_shots_last5': 15,  # Default value (can be enhanced)
-            'team_shots_on_target_last5': 8,
-            'possession_avg': features_dict['home_possession_avg'],
-            'venue_advantage': features_dict['venue_advantage']
+            'home_elo': features_dict['home_elo'],
+            'away_elo': features_dict['away_elo'],
+            'elo_diff': features_dict['elo_diff'],
+            'home_form_last5': features_dict['home_form_last5'],
+            'away_form_last5': features_dict['away_form_last5'],
+            'home_goals_last5': features_dict['home_goals_last5'],
+            'away_goals_last5': features_dict['away_goals_last5'],
+            'home_xg_last5': features_dict['home_xg_last5'],
+            'away_xg_last5': features_dict['away_xg_last5'],
+            'h2h_home_wins': features_dict['h2h_home_wins'],
+            'h2h_draws': features_dict['h2h_draws'],
+            'h2h_away_wins': features_dict['h2h_away_wins']
         }
         
         away_xg_features = {
-            'team_elo': features_dict['away_elo'],
-            'opponent_elo': features_dict['home_elo'],
-            'team_goals_last5': features_dict['away_goals_last5'],
-            'team_xg_last5': features_dict['away_xg_last5'],
-            'opponent_goals_conceded_last5': features_dict['home_goals_last5'],
-            'opponent_xga_last5': features_dict['home_xg_last5'],
-            'team_shots_last5': 12,
-            'team_shots_on_target_last5': 6,
-            'possession_avg': features_dict['away_possession_avg'],
-            'venue_advantage': -features_dict['venue_advantage']
+            'home_elo': features_dict['home_elo'],
+            'away_elo': features_dict['away_elo'],
+            'elo_diff': features_dict['elo_diff'],
+            'home_form_last5': features_dict['home_form_last5'],
+            'away_form_last5': features_dict['away_form_last5'],
+            'home_goals_last5': features_dict['home_goals_last5'],
+            'away_goals_last5': features_dict['away_goals_last5'],
+            'home_xg_last5': features_dict['home_xg_last5'],
+            'away_xg_last5': features_dict['away_xg_last5'],
+            'h2h_home_wins': features_dict['h2h_home_wins'],
+            'h2h_draws': features_dict['h2h_draws'],
+            'h2h_away_wins': features_dict['h2h_away_wins']
         }
         
         home_xg = xg_model_home.predict(home_xg_features)
         away_xg = xg_model_away.predict(away_xg_features)
         
-        return MatchPredictionResponse(
+        print(f"[ML Server] xG predictions - Home: {home_xg}, Away: {away_xg}")
+        
+        response = MatchPredictionResponse(
             home_win_prob=outcome_probs['home_win_prob'],
             draw_prob=outcome_probs['draw_prob'],
             away_win_prob=outcome_probs['away_win_prob'],
@@ -164,8 +184,14 @@ async def predict_match(request: MatchPredictionRequest):
             away_xg=away_xg,
             confidence=outcome_probs['confidence']
         )
+        
+        print(f"[ML Server] ✅ Sending response: {response}")
+        return response
     
     except Exception as e:
+        print(f"[ML Server] ❌ Error during prediction: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
 
 @app.post("/explain/match", response_model=ExplanationResponse)
@@ -258,7 +284,7 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
         "serve:app",
-        host="0.0.0.0",
+        host="127.0.0.1",  # Use IPv4 localhost for Windows compatibility
         port=int(os.getenv("PORT", "8000")),
         reload=True
     )

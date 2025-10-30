@@ -226,6 +226,11 @@ export class DbStorage implements IStorage {
     return match as Match;
   }
 
+  async updateMatch(id: string, match: Match): Promise<Match> {
+    await db.update(matches).set(match).where(eq(matches.id, id));
+    return match;
+  }
+
   async getPlayers(): Promise<Player[]> {
     return await db.select().from(players);
   }

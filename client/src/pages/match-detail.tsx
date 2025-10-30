@@ -58,6 +58,8 @@ export default function MatchDetail() {
   const { data: allPlayers, isLoading: playersLoading } = useQuery<Player[]>({
     queryKey: ["/api/players"],
     enabled: !!match,
+    staleTime: 0, // Always fetch fresh data
+    gcTime: 0, // Don't cache
   });
 
   // Filter players by the teams in this match
@@ -694,7 +696,7 @@ export default function MatchDetail() {
                                   {/* Rating Badge */}
                                   <div className="absolute top-3 right-3 flex flex-col items-center z-10">
                                     <div className="text-yellow-400 text-xl font-bold">
-                                      {player.expectedContribution.toFixed(1)}
+                                      {player.overall || player.expectedContribution.toFixed(1)}
                                     </div>
                                     <div className="text-xs text-gray-300">OVR</div>
                                   </div>
@@ -702,9 +704,9 @@ export default function MatchDetail() {
                                   {/* Player Image */}
                                   <div className="flex justify-center mt-8 mb-4">
                                     <div className={`relative w-20 h-20 rounded-full border-2 ${positionColor.border} overflow-hidden shadow-lg`}>
-                                      {player.imageUrl ? (
+                                      {(player.playerFaceUrl || player.imageUrl) ? (
                                         <img
-                                          src={player.imageUrl}
+                                          src={player.playerFaceUrl || player.imageUrl}
                                           alt={player.name}
                                           className="w-full h-full object-cover"
                                           onError={(e) => {
@@ -713,7 +715,7 @@ export default function MatchDetail() {
                                           }}
                                         />
                                       ) : null}
-                                      <div className={`${player.imageUrl ? 'hidden' : ''} w-full h-full bg-gray-600 flex items-center justify-center`}>
+                                      <div className={`${(player.playerFaceUrl || player.imageUrl) ? 'hidden' : ''} w-full h-full bg-gray-600 flex items-center justify-center`}>
                                         <User className="w-8 h-8 text-gray-400" />
                                       </div>
                                     </div>
@@ -818,7 +820,7 @@ export default function MatchDetail() {
                             {/* Rating Badge */}
                             <div className="absolute top-3 right-3 flex flex-col items-center z-10">
                               <div className="text-yellow-400 text-xl font-bold">
-                                {player.expectedContribution.toFixed(1)}
+                                {player.overall || player.expectedContribution.toFixed(1)}
                               </div>
                               <div className="text-xs text-gray-300">OVR</div>
                             </div>
@@ -826,9 +828,9 @@ export default function MatchDetail() {
                             {/* Player Image */}
                             <div className="flex justify-center mt-8 mb-4">
                               <div className={`relative w-20 h-20 rounded-full border-2 ${positionColor.border} overflow-hidden shadow-lg`}>
-                                {player.imageUrl ? (
+                                {(player.playerFaceUrl || player.imageUrl) ? (
                                   <img
-                                    src={player.imageUrl}
+                                    src={player.playerFaceUrl || player.imageUrl}
                                     alt={player.name}
                                     className="w-full h-full object-cover"
                                     onError={(e) => {
@@ -837,7 +839,7 @@ export default function MatchDetail() {
                                     }}
                                   />
                                 ) : null}
-                                <div className={`${player.imageUrl ? 'hidden' : ''} w-full h-full bg-gray-600 flex items-center justify-center`}>
+                                <div className={`${(player.playerFaceUrl || player.imageUrl) ? 'hidden' : ''} w-full h-full bg-gray-600 flex items-center justify-center`}>
                                   <User className="w-8 h-8 text-gray-400" />
                                 </div>
                               </div>
@@ -949,9 +951,9 @@ export default function MatchDetail() {
                           {/* Player Image and Info */}
                           <div className="flex items-center gap-6 mb-6">
                             <div className={`relative w-24 h-24 rounded-full border-3 ${positionColor.border} overflow-hidden shadow-xl`}>
-                              {selectedPlayer.imageUrl ? (
+                              {(selectedPlayer.playerFaceUrl || selectedPlayer.imageUrl) ? (
                                 <img
-                                  src={selectedPlayer.imageUrl}
+                                  src={selectedPlayer.playerFaceUrl || selectedPlayer.imageUrl}
                                   alt={selectedPlayer.name}
                                   className="w-full h-full object-cover"
                                   onError={(e) => {
@@ -960,7 +962,7 @@ export default function MatchDetail() {
                                   }}
                                 />
                               ) : null}
-                              <div className={`${selectedPlayer.imageUrl ? 'hidden' : ''} w-full h-full bg-gray-600 flex items-center justify-center`}>
+                              <div className={`${(selectedPlayer.playerFaceUrl || selectedPlayer.imageUrl) ? 'hidden' : ''} w-full h-full bg-gray-600 flex items-center justify-center`}>
                                 <User className="w-12 h-12 text-gray-400" />
                               </div>
                             </div>
