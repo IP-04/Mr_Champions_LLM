@@ -76,6 +76,12 @@ async function upsertUser(
 }
 
 export async function setupAuth(app: Express) {
+  // Skip Replit auth if not in Replit environment
+  if (!process.env.REPLIT_DOMAINS) {
+    console.log("⚠️  Skipping Replit auth - not in Replit environment");
+    return;
+  }
+
   app.set("trust proxy", 1);
   app.use(getSession());
   app.use(passport.initialize());

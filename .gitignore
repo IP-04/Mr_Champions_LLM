@@ -72,3 +72,4 @@ server/public/
 .replit
 replit.nix
 .breakpoints
+.vercel
