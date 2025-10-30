@@ -15,7 +15,20 @@
     "ml:features": "tsx ml/feature_engineering/extract.ts",
     "export-training-data": "tsx scripts/export-training-data.ts",
     "import-finished-matches": "tsx scripts/import-finished-matches.ts",
-    "update-match-results": "tsx scripts/update-match-results.ts"
+    "update-match-results": "tsx scripts/update-match-results.ts",
+    "sync-players": "tsx scripts/sync-player-data.ts",
+    "find-duplicates": "tsx scripts/find-duplicate-players.ts",
+    "merge-duplicates": "tsx scripts/merge-duplicate-players.ts",
+    "check-wirtz": "tsx scripts/check-wirtz.ts",
+    "check-merged": "tsx scripts/check-merged-players.ts",
+    "fix-image-urls": "tsx scripts/fix-image-urls.ts",
+    "fix-all-images": "tsx scripts/fix-all-image-paths.ts",
+    "check-mbappe": "tsx scripts/check-mbappe.ts",
+    "generate-sofifa-urls": "tsx scripts/generate-sofifa-urls.ts",
+    "generate-predictions": "tsx scripts/generate-ml-predictions.ts",
+    "ml:server": "cd ml/python && python serve.py",
+    "fix-gk-stats": "tsx scripts/fix-goalkeeper-stats.ts",
+    "fix-positions": "tsx scripts/fix-positions-smart.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

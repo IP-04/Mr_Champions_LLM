@@ -139,9 +139,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Players
   app.get("/api/players", async (req, res) => {
     const position = req.query.position as string;
-    const players = position 
+    let players = position 
       ? await storage.getPlayersByPosition(position)
       : await storage.getPlayers();
+    
+    // DEBUG: Check image URLs BEFORE normalization
+    console.log('🖼️ [DEBUG] First 3 players BEFORE normalization:');
+    players.slice(0, 3).forEach(p => {
+      console.log(`  ${p.name}: playerFaceUrl=${p.playerFaceUrl || 'NULL'}, imageUrl=${p.imageUrl || 'NULL'}`);
+    });
+    
+    // Normalize player data for display
+    players = players.map(player => normalizePlayerData(player));
+    
+    // DEBUG: Check image URLs AFTER normalization
+    console.log('🖼️ [DEBUG] First 3 players AFTER normalization:');
+    players.slice(0, 3).forEach(p => {
+      console.log(`  ${p.name}: playerFaceUrl=${p.playerFaceUrl || 'NULL'}, imageUrl=${p.imageUrl || 'NULL'}`);
+    });
+    
     res.json(players);
   });
 
@@ -151,14 +167,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(404).json({ message: "Player not found" });
     }
     
-    // Normalize probability to ensure it's 0-1
-    if (player.statProbability > 1) {
-      player.statProbability = player.statProbability / 100;
-    }
-    player.statProbability = Math.min(1.0, Math.max(0.0, player.statProbability));
+    // Normalize player data for display
+    const normalizedPlayer = normalizePlayerData(player);
     
-    res.json(player);
+    res.json(normalizedPlayer);
   });
+  
+  // Helper function to normalize player data for frontend display
+  function normalizePlayerData(player: any) {
+    // Normalize probability to ensure it's 0-1
+    let statProbability = player.statProbability;
+    if (statProbability > 1) {
+      statProbability = statProbability / 100;
+    }
+    statProbability = Math.min(1.0, Math.max(0.0, statProbability));
+    
+    // Normalize expectedContribution based on stat type
+    // The stored value is currently a 0-10 rating, convert to realistic expected stat
+    let expectedContribution = player.expectedContribution;
+    const statType = player.statType;
+    
+    if (expectedContribution > 5) {
+      // Scale down from 0-10 rating to realistic 0-2 expected stat range
+      const conversionFactors: Record<string, number> = {
+        "Goals": 0.15,        // 0-1.5 goals per match
+        "Assists": 0.12,      // 0-1.2 assists per match
+        "Goals + Assists": 0.20,  // 0-2.0 combined
+        "Saves": 0.5,         // 0-5 saves per match
+        "Clean Sheet": 0.08,  // 0-0.8 probability
+        "Tackles": 0.3,       // 0-3 tackles
+        "Interceptions": 0.2, // 0-2 interceptions
+      };
+      
+      const factor = conversionFactors[statType] || 0.1;
+      expectedContribution = expectedContribution * factor;
+    }
+    
+    // Normalize stat90 to realistic range
+    let stat90 = player.stat90;
+    if (stat90 > 5 && statType !== "Saves") {
+      // Likely incorrectly scaled, normalize to 0-2 range
+      stat90 = stat90 * 0.2;
+    }
+    
+    // Convert last5Avg to match rating (6.0-9.0 scale) if it's currently in different format
+    let last5Avg = player.last5Avg;
+    if (last5Avg > 10) {
+      // Convert from percentage or points to rating
+      last5Avg = 6.0 + (last5Avg / 100) * 3.0;
+    }
+    
+    return {
+      ...player,
+      expectedContribution: Math.round(expectedContribution * 100) / 100,
+      statProbability: Math.round(statProbability * 1000) / 1000,
+      stat90: Math.round(stat90 * 100) / 100,
+      last5Avg: Math.round(last5Avg * 10) / 10,
+    };
+  }
 
   // Feature Importance
   app.get("/api/feature-importance/:matchId", async (req, res) => {

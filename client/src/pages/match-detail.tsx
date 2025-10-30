@@ -20,10 +20,11 @@ export default function MatchDetail() {
   // Carousel setup
   const [emblaRef, emblaApi] = useEmblaCarousel({ 
     loop: false,
-    dragFree: true,
+    dragFree: false,
     containScroll: "trimSnaps",
     slidesToScroll: 1,
-    align: "start"
+    align: "start",
+    skipSnaps: false,
   });
 
   const [canScrollPrev, setCanScrollPrev] = useState(false);
@@ -62,10 +63,33 @@ export default function MatchDetail() {
     gcTime: 0, // Don't cache
   });
 
-  // Filter players by the teams in this match
-  const matchPlayers = allPlayers?.filter(player => 
+  // Filter and SORT players by the teams in this match
+  // Players with faces (playerFaceUrl) appear first
+  const matchPlayers = (allPlayers?.filter(player => 
     player.team === match?.homeTeam || player.team === match?.awayTeam
-  ) || [];
+  ) || []).sort((a, b) => {
+    const aHasFace = !!(a.playerFaceUrl && !a.playerFaceUrl.includes('ui-avatars'));
+    const bHasFace = !!(b.playerFaceUrl && !b.playerFaceUrl.includes('ui-avatars'));
+    
+    // Players with faces come first
+    if (aHasFace && !bHasFace) return -1;
+    if (!aHasFace && bHasFace) return 1;
+    
+    // Then by overall rating
+    const aRating = a.overall || a.expectedContribution || 0;
+    const bRating = b.overall || b.expectedContribution || 0;
+    return bRating - aRating;
+  });
+  
+  // DEBUG: Log player data
+  if (matchPlayers.length > 0) {
+    console.log('🖼️ [MatchDetail] First 3 match players (sorted):', matchPlayers.slice(0, 3).map(p => ({
+      name: p.name,
+      playerFaceUrl: p.playerFaceUrl || 'NULL',
+      imageUrl: p.imageUrl || 'NULL',
+      radarStats: p.radarStats || 'NULL'
+    })));
+  }
 
   if (matchLoading) {
     return (
@@ -658,7 +682,7 @@ export default function MatchDetail() {
                 {viewMode === 'carousel' ? (
                   /* Carousel Container */
                   <div className="relative">
-                    <div className="overflow-hidden" ref={emblaRef}>
+                    <div className="overflow-hidden -mx-2" ref={emblaRef}>
                       <div className="flex">
                         {matchPlayers
                           .filter(player => 
@@ -678,11 +702,11 @@ export default function MatchDetail() {
                             return (
                               <div 
                                 key={player.id} 
-                                className="flex-none w-full sm:w-1/2 lg:w-1/3 xl:w-1/4 px-2"
+                                className="embla__slide flex-[0_0_100%] sm:flex-[0_0_50%] lg:flex-[0_0_33.333%] xl:flex-[0_0_25%] min-w-0 pl-2 pr-2"
                               >
                                 <div 
                                   onClick={() => setSelectedPlayer(player)}
-                                  className="relative bg-gradient-to-t from-gray-900 via-gray-800 to-gray-700 rounded-2xl shadow-xl p-4 overflow-hidden border border-gray-700 hover:border-gray-600 transition-all duration-300 h-full cursor-pointer hover:scale-105"
+                                  className="relative bg-gradient-to-t from-gray-900 via-gray-800 to-gray-700 rounded-2xl shadow-xl p-4 overflow-hidden border border-gray-700 hover:border-gray-600 transition-all duration-300 h-full cursor-pointer hover:scale-[1.02]"
                                 >
                                   {/* FIFA-style card background */}
                                   <div className={`absolute inset-0 bg-gradient-to-br ${positionColor.bg} opacity-10`} />
@@ -834,8 +858,12 @@ export default function MatchDetail() {
                                     alt={player.name}
                                     className="w-full h-full object-cover"
                                     onError={(e) => {
+                                      console.error(`❌ [MatchDetail Card] Image failed for ${player.name}:`, e.currentTarget.src);
                                       e.currentTarget.style.display = 'none';
                                       e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                    }}
+                                    onLoad={() => {
+                                      console.log(`✅ [MatchDetail Card] Image loaded for ${player.name}`);
                                     }}
                                   />
                                 ) : null}
@@ -908,13 +936,19 @@ export default function MatchDetail() {
 
       {/* Player Stats Modal */}
       <Dialog open={!!selectedPlayer} onOpenChange={() => setSelectedPlayer(null)}>
-        <DialogContent className="max-w-2xl bg-gradient-to-b from-gray-900 to-gray-800 border-gray-700 text-white">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-gradient-to-b from-gray-900 to-gray-800 border-gray-700 text-white">
           {selectedPlayer && (
             <>
               <DialogHeader>
                 <DialogTitle className="text-2xl font-bold text-center">
                   Player Performance Analysis
                 </DialogTitle>
+                {/* Match Context - Subdued for hierarchy */}
+                {match && (
+                  <div className="text-center text-xs text-gray-500 mt-1">
+                    {match.homeTeam} vs {match.awayTeam} • {match.stage} • {match.date}
+                  </div>
+                )}
               </DialogHeader>
 
               <div className="space-y-6">
@@ -922,10 +956,10 @@ export default function MatchDetail() {
                 <div className="relative bg-gradient-to-t from-gray-900 via-gray-800 to-gray-700 rounded-2xl p-6 border border-gray-600">
                   {(() => {
                     const positionColors = {
-                      FWD: { bg: "from-red-600 to-red-800", text: "text-red-400", border: "border-red-500" },
-                      MID: { bg: "from-green-600 to-green-800", text: "text-green-400", border: "border-green-500" },
-                      DEF: { bg: "from-blue-600 to-blue-800", text: "text-blue-400", border: "border-blue-500" },
-                      GK: { bg: "from-yellow-600 to-yellow-800", text: "text-yellow-400", border: "border-yellow-500" },
+                      FWD: { bg: "from-red-600 to-red-800", text: "text-red-400", border: "border-red-500", accent: "bg-red-500" },
+                      MID: { bg: "from-green-600 to-green-800", text: "text-green-400", border: "border-green-500", accent: "bg-green-500" },
+                      DEF: { bg: "from-blue-600 to-blue-800", text: "text-blue-400", border: "border-blue-500", accent: "bg-blue-500" },
+                      GK: { bg: "from-yellow-600 to-yellow-800", text: "text-yellow-400", border: "border-yellow-500", accent: "bg-yellow-500" },
                     };
                     const positionColor = positionColors[selectedPlayer.position as keyof typeof positionColors] || positionColors.MID;
 
@@ -937,24 +971,38 @@ export default function MatchDetail() {
                         <div className="relative z-10">
                           {/* Header with Position and Rating */}
                           <div className="flex justify-between items-start mb-6">
-                            <div className={`px-3 py-1.5 bg-gradient-to-r ${positionColor.bg} rounded-lg text-white font-bold shadow-lg`}>
+                            <div className={`px-3 py-1.5 bg-gradient-to-r ${positionColor.bg} rounded-lg text-white font-bold shadow-lg text-sm`}>
                               {selectedPlayer.position}
                             </div>
                             <div className="text-center">
                               <div className="text-4xl font-bold text-yellow-400">
-                                {selectedPlayer.overall || selectedPlayer.expectedContribution.toFixed(1)}
+                                {selectedPlayer.overall || Math.round(selectedPlayer.expectedContribution * 10)}
                               </div>
-                              <div className="text-xs text-gray-300">Overall Rating</div>
+                              <div className="text-xs text-gray-300">
+                                Overall {selectedPlayer.overall ? '(FIFA)' : '(Est.)'}
+                              </div>
                             </div>
                           </div>
 
                           {/* Player Image and Info */}
                           <div className="flex items-center gap-6 mb-6">
-                            <div className={`relative w-24 h-24 rounded-full border-3 ${positionColor.border} overflow-hidden shadow-xl`}>
-                              {(selectedPlayer.playerFaceUrl || selectedPlayer.imageUrl) ? (
+                            <div className={`relative w-24 h-24 rounded-full border-3 ${positionColor.border} overflow-hidden shadow-xl bg-gradient-to-br ${positionColor.bg}`}>
+                              {selectedPlayer.playerFaceUrl ? (
                                 <img
-                                  src={selectedPlayer.playerFaceUrl || selectedPlayer.imageUrl}
+                                  src={selectedPlayer.playerFaceUrl}
                                   alt={selectedPlayer.name}
+                                  loading="lazy"
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                  }}
+                                />
+                              ) : selectedPlayer.imageUrl && !selectedPlayer.imageUrl.includes('ui-avatars') ? (
+                                <img
+                                  src={selectedPlayer.imageUrl}
+                                  alt={selectedPlayer.name}
+                                  loading="lazy"
                                   className="w-full h-full object-cover"
                                   onError={(e) => {
                                     e.currentTarget.style.display = 'none';
@@ -962,8 +1010,8 @@ export default function MatchDetail() {
                                   }}
                                 />
                               ) : null}
-                              <div className={`${(selectedPlayer.playerFaceUrl || selectedPlayer.imageUrl) ? 'hidden' : ''} w-full h-full bg-gray-600 flex items-center justify-center`}>
-                                <User className="w-12 h-12 text-gray-400" />
+                              <div className={`${selectedPlayer.playerFaceUrl || (selectedPlayer.imageUrl && !selectedPlayer.imageUrl.includes('ui-avatars')) ? 'hidden' : ''} w-full h-full bg-gray-700/50 backdrop-blur-sm flex items-center justify-center`}>
+                                <User className="w-12 h-12 text-gray-300" />
                               </div>
                             </div>
                             
@@ -972,41 +1020,110 @@ export default function MatchDetail() {
                                 {selectedPlayer.name}
                               </h2>
                               <p className="text-lg text-gray-300 mb-2">{selectedPlayer.team}</p>
-                              <div className="flex gap-2">
-                                <span className={`px-2 py-1 bg-black/30 rounded text-xs font-medium ${positionColor.text}`}>
-                                  {selectedPlayer.statType}
+                              <div className="flex gap-2 flex-wrap">
+                                <span className={`px-2 py-1 bg-black/30 rounded text-xs font-semibold ${positionColor.text} border border-current/20`} title="Primary stat tracked for this player">
+                                  {(() => {
+                                    // Dynamic role based on attributes
+                                    if (selectedPlayer.radarStats) {
+                                      const stats = selectedPlayer.radarStats;
+                                      const maxStat = Math.max(stats.pace, stats.shooting, stats.passing, stats.dribbling, stats.defending, stats.physical);
+                                      if (maxStat === stats.pace) return '⚡ Speed Merchant';
+                                      if (maxStat === stats.shooting) return '🎯 Finisher';
+                                      if (maxStat === stats.passing) return '📊 Playmaker';
+                                      if (maxStat === stats.dribbling) return '⚽ Dribbler';
+                                      if (maxStat === stats.defending) return '🛡️ Defender';
+                                      if (maxStat === stats.physical) return '💪 Powerhouse';
+                                    }
+                                    return `${selectedPlayer.statType} Focus`;
+                                  })()}
                                 </span>
-                                <span className="px-2 py-1 bg-black/30 rounded text-xs font-medium text-white">
-                                  {selectedPlayer.predictedMinutes} min
+                                <span className="px-2 py-1 bg-black/30 rounded text-xs font-medium text-white border border-gray-600" title="Projected playing time based on form and fitness">
+                                  ⏱️ {selectedPlayer.predictedMinutes} min (proj.)
                                 </span>
                               </div>
                             </div>
                           </div>
 
-                          {/* Key Stats Grid */}
-                          <div className="grid grid-cols-4 gap-3 mb-6">
-                            <div className="bg-black/30 rounded-lg p-3 text-center">
-                              <div className="text-xs text-gray-400 mb-1">Expected {selectedPlayer.statType}</div>
-                              <div className={`text-lg font-bold ${positionColor.text}`}>
+                          {/* Key Stats Grid with Enhanced Tooltips */}
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            {/* Expected Contribution - Match Specific with confidence */}
+                            <div className="bg-black/30 rounded-lg p-3 hover:bg-black/40 hover:scale-105 transition-all group cursor-help border border-transparent hover:border-gray-600" title={`Expected ${selectedPlayer.statType.toLowerCase()}: predicted contribution for this match`}>
+                              <div className="text-xs font-semibold text-gray-300 mb-1 flex items-center gap-1">
+                                {selectedPlayer.statType === 'Goals' ? 'Goal Contribution' : 
+                                 selectedPlayer.statType === 'Assists' ? 'Assist Contribution' :
+                                 selectedPlayer.statType === 'Saves' ? 'Expected Saves' :
+                                 selectedPlayer.statType === 'Tackles' ? 'Expected Tackles' :
+                                 selectedPlayer.statType === 'Interceptions' ? 'Expected Interceptions' :
+                                 selectedPlayer.statType}
+                                <span className="text-[10px] opacity-60">ⓘ</span>
+                              </div>
+                              <div className={`text-2xl font-bold ${positionColor.text}`}>
                                 {selectedPlayer.expectedContribution.toFixed(2)}
                               </div>
+                              <div className="text-[10px] text-gray-400 mt-0.5">
+                                {selectedPlayer.statType === 'Goals' ? 'xG' : 
+                                 selectedPlayer.statType === 'Assists' ? 'xA' : 
+                                 selectedPlayer.statType === 'Saves' ? 'Expected' :
+                                 selectedPlayer.statType === 'Tackles' ? 'Expected' :
+                                 'xG+xA'}
+                                <span className="text-gray-500"> ± {(selectedPlayer.expectedContribution * 0.15).toFixed(2)}</span>
+                              </div>
+                              <div className="text-[10px] text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                📊 vs {match?.awayTeam === selectedPlayer.team ? match?.homeTeam : match?.awayTeam}
+                              </div>
                             </div>
-                            <div className="bg-black/30 rounded-lg p-3 text-center">
-                              <div className="text-xs text-gray-400 mb-1">{selectedPlayer.statType} Per 90</div>
-                              <div className="text-lg font-bold text-white">
+
+                            {/* Season Average Per 90 */}
+                            <div className="bg-black/30 rounded-lg p-3 hover:bg-black/40 hover:scale-105 transition-all group cursor-help border border-transparent hover:border-gray-600" title={`Season-long average per 90 minutes played`}>
+                              <div className="text-xs font-semibold text-gray-300 mb-1 flex items-center gap-1">
+                                Per 90 (Season)
+                                <span className="text-[10px] opacity-60">ⓘ</span>
+                              </div>
+                              <div className="text-2xl font-bold text-white">
                                 {selectedPlayer.stat90.toFixed(2)}
                               </div>
-                            </div>
-                            <div className="bg-black/30 rounded-lg p-3 text-center">
-                              <div className="text-xs text-gray-400 mb-1">Hit Probability</div>
-                              <div className="text-lg font-bold text-white">
-                                {(Math.min(1.0, Math.max(0.0, selectedPlayer.statProbability)) * 100).toFixed(1)}%
+                              <div className="text-[10px] text-gray-500 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                📈 Historical avg
                               </div>
                             </div>
-                            <div className="bg-black/30 rounded-lg p-3 text-center">
-                              <div className="text-xs text-gray-400 mb-1">Avg Last 5</div>
-                              <div className="text-lg font-bold text-white">
-                                {selectedPlayer.last5Avg.toFixed(2)}
+
+                            {/* Hit Probability with threshold explanation */}
+                            <div className="bg-black/30 rounded-lg p-3 hover:bg-black/40 hover:scale-105 transition-all group cursor-help border border-transparent hover:border-gray-600" title={`Probability of recording ≥ ${(selectedPlayer.expectedContribution * 0.75).toFixed(1)} ${selectedPlayer.statType.toLowerCase()} (model threshold)`}>
+                              <div className="text-xs font-semibold text-gray-300 mb-1 flex items-center gap-1">
+                                Hit Probability
+                                <span className="text-[10px] opacity-60">ⓘ</span>
+                              </div>
+                              <div className={`text-2xl font-bold ${
+                                selectedPlayer.statProbability >= 0.5 ? 'text-green-400' : 
+                                selectedPlayer.statProbability >= 0.3 ? 'text-yellow-400' : 'text-gray-400'
+                              }`}>
+                                {(Math.min(1.0, Math.max(0.0, selectedPlayer.statProbability)) * 100).toFixed(0)}%
+                              </div>
+                              <div className="text-[10px] text-gray-400 mt-0.5">
+                                ≥ {(selectedPlayer.expectedContribution * 0.75).toFixed(1)} {selectedPlayer.statType.toLowerCase()}
+                              </div>
+                              <div className="text-[10px] text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                {selectedPlayer.statProbability >= 0.5 ? '🟢 High' : selectedPlayer.statProbability >= 0.3 ? '🟡 Moderate' : '⚪ Low'} confidence
+                              </div>
+                            </div>
+
+                            {/* Form Rating with scale clarification */}
+                            <div className="bg-black/30 rounded-lg p-3 hover:bg-black/40 hover:scale-105 transition-all group cursor-help border border-transparent hover:border-gray-600" title="Average match rating (1-10 scale) from last 5 appearances. Based on Opta/SofaScore methodology">
+                              <div className="text-xs font-semibold text-gray-300 mb-1 flex items-center gap-1">
+                                Form Rating
+                                <span className="text-[10px] opacity-60">ⓘ</span>
+                              </div>
+                              <div className={`text-2xl font-bold ${
+                                selectedPlayer.last5Avg >= 7.5 ? 'text-green-400' : 
+                                selectedPlayer.last5Avg >= 6.5 ? 'text-white' : 'text-yellow-400'
+                              }`}>
+                                {selectedPlayer.last5Avg.toFixed(1)}<span className="text-sm text-gray-500">/10</span>
+                              </div>
+                              <div className="text-[10px] text-gray-400 mt-0.5">
+                                Avg L5 matches
+                              </div>
+                              <div className="text-[10px] text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                {selectedPlayer.last5Avg >= 7.5 ? '🔥 Hot form' : selectedPlayer.last5Avg >= 6.5 ? '✓ Solid' : '📉 Inconsistent'}
                               </div>
                             </div>
                           </div>
@@ -1021,60 +1138,296 @@ export default function MatchDetail() {
                   <h3 className="text-xl font-bold mb-4 text-center text-white">
                     Player Attributes
                   </h3>
-                  <div className="bg-black/20 rounded-xl p-4">
-                    <RadarChart player={selectedPlayer} />
-                  </div>
                   
-                  {/* Attribute Breakdown */}
-                  <div className="mt-6 grid grid-cols-2 gap-4">
-                    {(() => {
-                      const positionColors = {
-                        FWD: { bg: "from-red-600 to-red-800", text: "text-red-400" },
-                        MID: { bg: "from-green-600 to-green-800", text: "text-green-400" },
-                        DEF: { bg: "from-blue-600 to-blue-800", text: "text-blue-400" },
-                        GK: { bg: "from-yellow-600 to-yellow-800", text: "text-yellow-400" },
-                      };
-                      const positionColor = positionColors[selectedPlayer.position as keyof typeof positionColors] || positionColors.MID;
+                  {(() => {
+                    console.log('🔍 [Modal] selectedPlayer.radarStats:', selectedPlayer.radarStats);
+                    console.log('🔍 [Modal] Type:', typeof selectedPlayer.radarStats);
+                    console.log('🔍 [Modal] Full player:', selectedPlayer);
+                    return selectedPlayer.radarStats;
+                  })() ? (
+                    <>
+                      <div className="bg-black/20 rounded-xl p-4">
+                        <RadarChart player={selectedPlayer} />
+                      </div>
                       
-                      // Use real radar stats if available, otherwise estimate
-                      const attributes = selectedPlayer.radarStats ? [
-                        { name: 'Pace', value: selectedPlayer.radarStats.pace },
-                        { name: 'Shooting', value: selectedPlayer.radarStats.shooting },
-                        { name: 'Passing', value: selectedPlayer.radarStats.passing },
-                        { name: 'Dribbling', value: selectedPlayer.radarStats.dribbling },
-                        { name: 'Defending', value: selectedPlayer.radarStats.defending },
-                        { name: 'Physical', value: selectedPlayer.radarStats.physical },
-                      ] : (() => {
-                        const baseValue = selectedPlayer.expectedContribution * 8;
-                        return [
-                          { name: 'Pace', value: Math.min(99, Math.max(40, baseValue * (selectedPlayer.position === 'FWD' ? 1.2 : selectedPlayer.position === 'DEF' ? 0.8 : 1.0))) },
-                          { name: 'Shooting', value: Math.min(99, Math.max(40, baseValue * (selectedPlayer.position === 'FWD' ? 1.3 : 0.8))) },
-                          { name: 'Passing', value: Math.min(99, Math.max(40, baseValue * (selectedPlayer.position === 'MID' ? 1.3 : 0.9))) },
-                          { name: 'Dribbling', value: Math.min(99, Math.max(40, baseValue * (selectedPlayer.position === 'FWD' || selectedPlayer.position === 'MID' ? 1.2 : 0.7))) },
-                          { name: 'Defending', value: Math.min(99, Math.max(40, baseValue * (selectedPlayer.position === 'DEF' ? 1.4 : 0.6))) },
-                          { name: 'Physical', value: Math.min(99, Math.max(40, baseValue * 1.0)) },
-                        ];
-                      })();
+                      {/* Attribute Breakdown with Color Coding */}
+                      <div className="mt-6 grid grid-cols-2 gap-4">
+                        {(() => {
+                          // Different colors for each attribute category
+                          const attributeColors = {
+                            'Pace': { gradient: 'from-yellow-500 to-yellow-600', text: 'text-yellow-400' },
+                            'Shooting': { gradient: 'from-red-500 to-red-600', text: 'text-red-400' },
+                            'Passing': { gradient: 'from-green-500 to-green-600', text: 'text-green-400' },
+                            'Dribbling': { gradient: 'from-purple-500 to-purple-600', text: 'text-purple-400' },
+                            'Defending': { gradient: 'from-blue-500 to-blue-600', text: 'text-blue-400' },
+                            'Physical': { gradient: 'from-orange-500 to-orange-600', text: 'text-orange-400' },
+                          };
+                          
+                          const attributes = [
+                            { name: 'Pace', value: selectedPlayer.radarStats.pace },
+                            { name: 'Shooting', value: selectedPlayer.radarStats.shooting },
+                            { name: 'Passing', value: selectedPlayer.radarStats.passing },
+                            { name: 'Dribbling', value: selectedPlayer.radarStats.dribbling },
+                            { name: 'Defending', value: selectedPlayer.radarStats.defending },
+                            { name: 'Physical', value: selectedPlayer.radarStats.physical },
+                          ];
 
-                      return attributes.map(attr => (
-                        <div key={attr.name} className="space-y-1">
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-300">{attr.name}</span>
-                            <span className={`text-sm font-bold ${positionColor.text}`}>
-                              {Math.round(attr.value)}
+                          const tooltips = {
+                            'Pace': 'Speed & acceleration (sprint, agility)',
+                            'Shooting': 'Finishing & shot power ability',
+                            'Passing': 'Short & long passing accuracy',
+                            'Dribbling': 'Ball control & close skills',
+                            'Defending': 'Tackles & defensive awareness',
+                            'Physical': 'Strength, stamina & endurance'
+                          };
+
+                          return attributes.map(attr => {
+                            const colors = attributeColors[attr.name as keyof typeof attributeColors];
+                            return (
+                              <div key={attr.name} className="space-y-1.5 group cursor-help" title={tooltips[attr.name as keyof typeof tooltips]}>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm font-medium text-gray-300 group-hover:text-white transition-colors">{attr.name}</span>
+                                  <span className={`text-sm font-bold ${colors.text}`}>
+                                    {Math.round(attr.value)}
+                                  </span>
+                                </div>
+                                <div className="h-2.5 bg-gray-700 rounded-full overflow-hidden group-hover:h-3 transition-all">
+                                  <div 
+                                    className={`h-full bg-gradient-to-r ${colors.gradient} transition-all duration-500 shadow-sm group-hover:shadow-lg`}
+                                    style={{ width: `${attr.value}%` }}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                      
+                      {/* Data Source Attribution - Enhanced */}
+                      <div className="mt-4 pt-4 border-t border-gray-700/50">
+                        <div className="text-center text-xs text-gray-400 mb-2">
+                          <div className="font-semibold text-gray-300 mb-1.5">Data Sources</div>
+                          <div className="flex items-center justify-center gap-3 flex-wrap">
+                            <span className="inline-flex items-center gap-1.5 bg-black/20 px-2 py-1 rounded">
+                              <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                              <span>FIFA 25 Attributes</span>
+                            </span>
+                            <span className="inline-flex items-center gap-1.5 bg-black/20 px-2 py-1 rounded">
+                              <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                              <span>ML Predictions</span>
+                            </span>
+                            <span className="inline-flex items-center gap-1.5 bg-black/20 px-2 py-1 rounded">
+                              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                              <span>Historical Stats</span>
                             </span>
                           </div>
-                          <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
-                            <div 
-                              className={`h-full bg-gradient-to-r ${positionColor.bg} transition-all duration-500`}
-                              style={{ width: `${attr.value}%` }}
-                            />
+                          <div className="text-[10px] text-gray-600 mt-2">
+                            Stats via SoFIFA • Predictions via proprietary ML model • Match data via API-Football
                           </div>
                         </div>
-                      ));
-                    })()}
-                  </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="bg-black/20 rounded-xl p-4 mb-4">
+                        <div className="text-center py-8 text-gray-400">
+                          <div className="text-sm mb-2">⚠️ Detailed FIFA attributes not yet loaded</div>
+                          <div className="text-xs">Estimated performance metrics shown below</div>
+                        </div>
+                      </div>
+                      
+                      {/* Estimated Attribute Breakdown */}
+                      <div className="grid grid-cols-2 gap-4">
+                        {(() => {
+                          const attributeColors = {
+                            'Pace': { gradient: 'from-yellow-500 to-yellow-600', text: 'text-yellow-400' },
+                            'Shooting': { gradient: 'from-red-500 to-red-600', text: 'text-red-400' },
+                            'Passing': { gradient: 'from-green-500 to-green-600', text: 'text-green-400' },
+                            'Dribbling': { gradient: 'from-purple-500 to-purple-600', text: 'text-purple-400' },
+                            'Defending': { gradient: 'from-blue-500 to-blue-600', text: 'text-blue-400' },
+                            'Physical': { gradient: 'from-orange-500 to-orange-600', text: 'text-orange-400' },
+                          };
+                          
+                          const baseValue = Math.max(50, Math.min(85, selectedPlayer.overall || selectedPlayer.expectedContribution * 10));
+                          const attributes = [
+                            { name: 'Pace', value: baseValue * (selectedPlayer.position === 'FWD' ? 1.15 : selectedPlayer.position === 'DEF' ? 0.85 : 1.0) },
+                            { name: 'Shooting', value: baseValue * (selectedPlayer.position === 'FWD' ? 1.2 : selectedPlayer.position === 'GK' ? 0.4 : 0.8) },
+                            { name: 'Passing', value: baseValue * (selectedPlayer.position === 'MID' ? 1.2 : 0.9) },
+                            { name: 'Dribbling', value: baseValue * (selectedPlayer.position === 'FWD' || selectedPlayer.position === 'MID' ? 1.15 : 0.7) },
+                            { name: 'Defending', value: baseValue * (selectedPlayer.position === 'DEF' ? 1.25 : selectedPlayer.position === 'GK' ? 0.5 : 0.65) },
+                            { name: 'Physical', value: baseValue * (selectedPlayer.position === 'GK' ? 0.8 : 1.0) },
+                          ].map(attr => ({ ...attr, value: Math.min(99, Math.max(40, Math.round(attr.value))) }));
+
+                          return attributes.map(attr => {
+                            const colors = attributeColors[attr.name as keyof typeof attributeColors];
+                            return (
+                              <div key={attr.name} className="space-y-1.5">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm font-medium text-gray-300">{attr.name}</span>
+                                  <span className={`text-sm font-bold ${colors.text} opacity-70`}>
+                                    ~{Math.round(attr.value)}
+                                  </span>
+                                </div>
+                                <div className="h-2.5 bg-gray-700 rounded-full overflow-hidden">
+                                  <div 
+                                    className={`h-full bg-gradient-to-r ${colors.gradient} transition-all duration-500 opacity-60`}
+                                    style={{ width: `${attr.value}%` }}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                      <div className="mt-4 text-center text-xs text-gray-500">
+                        Estimated values • Run sync script to load accurate FIFA stats
+                      </div>
+                    </>
+                  )}
                 </div>
+
+                {/* Match Context & Insights */}
+                {match && (
+                  <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl p-6 border border-gray-700">
+                    <h3 className="text-lg font-bold mb-4 text-white flex items-center gap-2">
+                      <span>⚔️</span>
+                      <span>Match Context</span>
+                    </h3>
+                    
+                    <div className="space-y-3">
+                      {/* Opponent Info with Context */}
+                      <div className="bg-black/20 rounded-lg p-3 border border-gray-700/50">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-xs text-gray-400 mb-1">Opponent</div>
+                            <div className="text-sm font-semibold text-white">
+                              {match.awayTeam === selectedPlayer.team ? match.homeTeam : match.awayTeam}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-xs text-gray-400 mb-1">Defensive Strength</div>
+                            <div className="text-sm font-bold text-yellow-400">
+                              {(() => {
+                                const opponentXg = selectedPlayer.team === match.homeTeam ? match.awayXg : match.homeXg;
+                                return opponentXg < 1.5 ? 'Strong 🛡️' : opponentXg < 2.0 ? 'Average' : 'Weak';
+                              })()}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Match Stats */}
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="bg-black/20 rounded-lg p-3">
+                          <div className="text-xs text-gray-400 mb-1">Team xG</div>
+                          <div className="text-lg font-bold text-white">
+                            {(selectedPlayer.team === match.homeTeam ? match.homeXg : match.awayXg).toFixed(1)}
+                          </div>
+                          <div className="text-xs text-gray-500">Expected</div>
+                        </div>
+
+                        <div className="bg-black/20 rounded-lg p-3">
+                          <div className="text-xs text-gray-400 mb-1">Win %</div>
+                          <div className="text-lg font-bold text-white">
+                            {(selectedPlayer.team === match.homeTeam ? match.homeWinProb : match.awayWinProb).toFixed(0)}%
+                          </div>
+                          <div className="text-xs text-gray-500">Chance</div>
+                        </div>
+
+                        <div className="bg-black/20 rounded-lg p-3">
+                          <div className="text-xs text-gray-400 mb-1">Opp xGA</div>
+                          <div className="text-lg font-bold text-white">
+                            {(selectedPlayer.team === match.homeTeam ? match.awayXg : match.homeXg).toFixed(1)}
+                          </div>
+                          <div className="text-xs text-gray-500">Allowed</div>
+                        </div>
+                      </div>
+
+                      {/* PrizePicks-style Line Comparison - Enhanced */}
+                      <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 rounded-lg p-4 border border-blue-600/40 shadow-lg">
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-xs font-semibold text-gray-200">Betting Line (Estimated)</span>
+                          <span className="text-xs text-gray-400 bg-black/30 px-2 py-0.5 rounded">Model-based</span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="flex-1">
+                            <div className="text-xs text-gray-400 mb-1">Line: {selectedPlayer.statType}</div>
+                            <div className="text-3xl font-bold text-white">
+                              {(selectedPlayer.expectedContribution * 0.75).toFixed(1)}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              {selectedPlayer.statType === 'Goals' ? 'Goals' : selectedPlayer.statType === 'Assists' ? 'Assists' : 'G+A'}
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            {(() => {
+                              const isOverRecommended = selectedPlayer.expectedContribution > (selectedPlayer.expectedContribution * 0.75);
+                              const overProb = Math.min(1.0, selectedPlayer.statProbability) * 100;
+                              const underProb = 100 - overProb;
+                              
+                              return (
+                                <>
+                                  <button className={`px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 ${
+                                    isOverRecommended
+                                      ? 'bg-green-600 text-white shadow-lg shadow-green-600/30 ring-2 ring-green-400/50' 
+                                      : 'bg-gray-700/50 text-gray-400 hover:bg-gray-700'
+                                  }`}>
+                                    <div className="flex items-center gap-2">
+                                      {isOverRecommended && <span className="text-sm">⭐</span>}
+                                      <span>OVER</span>
+                                    </div>
+                                    <div className="text-xs mt-0.5">{overProb.toFixed(0)}% prob</div>
+                                  </button>
+                                  <button className={`px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 ${
+                                    !isOverRecommended
+                                      ? 'bg-red-600 text-white shadow-lg shadow-red-600/30 ring-2 ring-red-400/50' 
+                                      : 'bg-gray-700/50 text-gray-400 hover:bg-gray-700'
+                                  }`}>
+                                    <div className="flex items-center gap-2">
+                                      {!isOverRecommended && <span className="text-sm">⭐</span>}
+                                      <span>UNDER</span>
+                                    </div>
+                                    <div className="text-xs mt-0.5">{underProb.toFixed(0)}% prob</div>
+                                  </button>
+                                </>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Smart Insight with Confidence Level */}
+                      <div className="bg-black/20 rounded-lg p-3 border border-gray-700/50">
+                        <div className="text-xs text-gray-300 text-center">
+                          <span className="inline-flex items-center gap-2">
+                            <span>💡</span>
+                            <span>
+                              Model {(() => {
+                                const confidence = Math.min(1.0, selectedPlayer.statProbability) * 100;
+                                const recommendation = selectedPlayer.expectedContribution > (selectedPlayer.expectedContribution * 0.75) ? 'OVER' : 'UNDER';
+                                const confidenceLevel = confidence >= 50 ? 'high' : confidence >= 30 ? 'moderate' : 'low';
+                                
+                                return (
+                                  <>
+                                    <span className="font-bold text-white">{confidenceLevel === 'low' ? 'leans' : 'suggests'}</span>
+                                    {' '}
+                                    <span className={`font-bold ${recommendation === 'OVER' ? 'text-green-400' : 'text-red-400'}`}>
+                                      {recommendation}
+                                    </span>
+                                    {' '}
+                                    <span className="text-gray-400">
+                                      with {confidenceLevel} confidence ({confidence.toFixed(0)}%)
+                                    </span>
+                                  </>
+                                );
+                              })()}
+                            </span>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           )}

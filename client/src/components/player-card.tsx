@@ -15,6 +15,13 @@ export function PlayerCard({ player }: PlayerCardProps) {
   const [selectedPick, setSelectedPick] = useState<"over" | "under" | null>(null);
   const [imageError, setImageError] = useState(false);
   const queryClient = useQueryClient();
+  
+  // DEBUG: Log image URLs
+  console.log(`🖼️ [PlayerCard] ${player.name}:`, {
+    playerFaceUrl: player.playerFaceUrl || 'NULL',
+    imageUrl: player.imageUrl || 'NULL',
+    hasImage: !!(player.playerFaceUrl || player.imageUrl)
+  });
 
   const pickMutation = useMutation({
     mutationFn: async (isOver: boolean) => {
@@ -89,7 +96,13 @@ export function PlayerCard({ player }: PlayerCardProps) {
               src={player.playerFaceUrl || player.imageUrl}
               alt={player.name}
               className="w-full h-full object-cover"
-              onError={() => setImageError(true)}
+              onError={(e) => {
+                console.error(`❌ [PlayerCard] Image failed to load for ${player.name}:`, e.currentTarget.src);
+                setImageError(true);
+              }}
+              onLoad={() => {
+                console.log(`✅ [PlayerCard] Image loaded successfully for ${player.name}`);
+              }}
             />
           ) : (
             <div className="w-full h-full bg-gray-600 flex items-center justify-center">
